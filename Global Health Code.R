@@ -24,11 +24,11 @@ ggplot(df18, aes(x=Q18)) +
        y = "total votes")
 
 #Bar Graph of Q14
-df <- df %>% 
+df14 <- df %>% 
   filter(Q14 != "") #%>% 
 #view()
 
-ggplot(data=df, aes(x = df$Q14, 
+ggplot(data=df14, aes(x = df14$Q14, 
                     main = "Global Health Career Interest?",
                     xlab = "Options")) + 
   geom_bar(fill = 'blue')
@@ -103,7 +103,6 @@ n1 = length(Uninterested_df18$Q18)
 inits <- list(mu_0 = 1, mu_1 = 1, phi0 = .1, phi1 = .1)
 data <- list("y_0" = Interested_df18$Q18, "y_1" = Uninterested_df18$Q18, "n0" = n0, "n1" = n1)
 
-
 jm <- jags.model("normal-normal.jags", data = data, quiet = TRUE)
 
 samps <- coda.samples(jm, variable.names = c("diff"), n.iter = 10000)
@@ -118,9 +117,6 @@ plot(samps)
 #Below worked for me earlier but for some reason didn't work today
 #mcmc_areas(samps, "mu", prob = .95, point.est = "mean") + 
  # labs(x = expression(mu), title = "Posterior")
-
-
-
 
 #Previous Stuff Not Sure how legit
 
