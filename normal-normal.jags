@@ -1,0 +1,22 @@
+
+model {
+## sampling
+
+for(i in 1:n0){
+y_0[i] ~ dnorm(mu_0, phi0)
+}
+for(i in 1:n1){
+y_1[i] ~ dnorm(mu_1, phi1)
+}
+## priors
+
+mu_0 ~ dnorm(0, .0001)
+mu_1 ~ dnorm(0, .0001)
+phi0 ~ dgamma(.1,.1)
+phi1 ~ dgamma(.1,.1)
+
+##interests
+
+diff <- mu_0 - mu_1
+#ratio <- mu_0/mu_1
+}
