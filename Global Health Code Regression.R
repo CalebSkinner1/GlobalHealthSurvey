@@ -35,23 +35,32 @@ view(df)
 
 # plots
   # Bar Graph of Q14
-ggplot(data=df, aes(x = df$Q14)) + geom_bar(fill = 'blue')
+ggplot(data=df, aes(x = df$Q14)) + geom_bar(fill = 'blue') +
+  labs(title = "Global Health Career Interest?", x = "Responses")
   # Bar Graph of Q2
-ggplot(data=df, aes(x = df$Q2)) + geom_bar(fill = 'blue')
+ggplot(data=df, aes(x = df$Q2)) + geom_bar(fill = 'blue') +
+  labs(title = "Education", x = "Years")
   # Bar Graph of Q3
-ggplot(data=df, aes(x = df$Q3)) + geom_bar(fill = 'blue')
+ggplot(data=df, aes(x = df$Q3)) + geom_bar(fill = 'blue') +
+  labs(title = "Age?", x = "Age Range")
   # Bar Graph of Q10
-ggplot(data=df, aes(x = df$Q10)) + geom_bar(fill = 'blue')
+ggplot(data=df, aes(x = df$Q10)) + geom_bar(fill = 'blue') +
+  labs(title = "Were you born outside the United States?", x = "Responses")
   # Bar Graph of Q12
-ggplot(data=df, aes(x = df$Q12)) + geom_bar(fill = 'blue')
+ggplot(data=df, aes(x = df$Q12)) + geom_bar(fill = 'blue')  +
+  labs(title = "Have you lived outside the United States?", x = "Responses")
   # Q2 with Q14
-ggplot(df, aes(x=Q2 , col = Q14)) + geom_bar()
+ggplot(df, aes(x=Q2 , col = Q14)) + geom_bar() +
+  labs(title = "Global Health Career Interest by Education", x = "Years")
   # Q3 with Q14
-ggplot(df, aes(x=Q3 , col = Q14)) + geom_bar()
+ggplot(df, aes(x=Q3 , col = Q14)) + geom_bar() +
+  labs(title = "Global Health Career Interest by Age Range", x = "Age Range")
   # Q10 with Q14
-ggplot(df, aes(x=Q10 , col = Q14)) + geom_bar()
+ggplot(df, aes(x=Q10 , col = Q14)) + geom_bar() +
+  labs(title = "Global Health Career Interest by Born outside US", x = "Born outside US?")
   # Q12 with Q14
-ggplot(df, aes(x=Q12 , col = Q14)) + geom_bar()
+ggplot(df, aes(x=Q12 , col = Q14)) + geom_bar() +
+  labs(title = "Global Health Career Interest by living outside the US", x = "Lived outside US?")
 
 # Regression for Q14
 
