@@ -6,21 +6,17 @@ library(readxl)
 library(runjags)
 library(ggplot2)
 
-setwd("~/Desktop")
-df <-read.csv("Global_Health_data.csv")
- df <- subset(df, select = c(20,22,26,36,38:40, 43:45, 47:50))
-df <- df[-c(1:2),]
-view(df)
+# read in data
+df0 <- read.csv("Global_Health_data.csv") %>% 
+  select(20,22,26,36,38:40, 43:45, 47:50) %>% view()
+df0 <- df0[-c(1:2),] %>% view()
 
 # Prep for Regression
 
-  # filter the data
-df <- subset(df, df$Q14 != "")
-df <- subset(df, df$Q2 != "")
-df <- subset(df, df$Q3 != "")
-df <- subset(df, df$Q10 != "")
-df <- subset(df, df$Q12 != "")
-view(df)
+# filter out blanks in the data
+df <- df0 %>%
+  filter(Q14 != "", Q2 != "", Q3 != "", Q10 != "", Q12 != "") %>%
+  view()
 
   # put data into proper form
 scores = c("1st year" = 1, "2nd year" = 2, "3rd year" = 3, "4th year" = 4, "5th year" = 5)
@@ -34,41 +30,60 @@ df <- mutate(df, Q12. = ifelse(Q12 == "Yes", 1, 0))
 view(df)
 
 # plots
-  # Bar Graph of Q14
-ggplot(data=df, aes(x = df$Q14)) + geom_bar(fill = 'blue') +
+  # Bar Graph of Q14 (Do you have an interest in Global Health)
+ggplot(df, aes(Q14)) + 
+  geom_bar(fill = 'cornsilk3') +
   labs(title = "Global Health Career Interest?", x = "Responses")
-  # Bar Graph of Q2
-ggplot(data=df, aes(x = df$Q2)) + geom_bar(fill = 'blue') +
+
+  # Bar Graph of Q2 (Education Count)
+ggplot(df, aes(Q2)) + 
+  geom_bar(fill = 'cornsilk3') +
   labs(title = "Education", x = "Years")
-  # Bar Graph of Q3
-ggplot(data=df, aes(x = df$Q3)) + geom_bar(fill = 'blue') +
+
+  # Bar Graph of Q3 (What is your Age Range)
+ggplot(df, aes(Q3)) + 
+  geom_bar(fill = 'cornsilk3') +
   labs(title = "Age?", x = "Age Range")
-  # Bar Graph of Q10
-ggplot(data=df, aes(x = df$Q10)) + geom_bar(fill = 'blue') +
+
+  # Bar Graph of Q10 (Born outside the US?)
+ggplot(df, aes(Q10)) +
+  geom_bar(fill = 'cornsilk3') +
   labs(title = "Were you born outside the United States?", x = "Responses")
-  # Bar Graph of Q12
-ggplot(data=df, aes(x = df$Q12)) + geom_bar(fill = 'blue')  +
+
+  # Bar Graph of Q12 (Lived outside the US?)
+ggplot(df, aes(Q12)) +
+  geom_bar(fill = 'cornsilk3')  +
   labs(title = "Have you lived outside the United States?", x = "Responses")
-  # Q2 with Q14
-ggplot(df, aes(x=Q2 , col = Q14)) + geom_bar() +
+
+  # Q2 with Q14 (Global Health Career Interest by Education)
+ggplot(df) +
+  geom_bar(aes(Q2, fill = Q14), position = "dodge") +
   labs(title = "Global Health Career Interest by Education", x = "Years")
-  # Q3 with Q14
-ggplot(df, aes(x=Q3 , col = Q14)) + geom_bar() +
+
+  # Q3 with Q14 (Global Health Career Interest by Age)
+ggplot(df) +
+  geom_bar(aes(Q3 , fill = Q14), position = "dodge") +
   labs(title = "Global Health Career Interest by Age Range", x = "Age Range")
+
   # Q10 with Q14
-ggplot(df, aes(x=Q10 , col = Q14)) + geom_bar() +
+ggplot(df) +
+  geom_bar(aes(Q10 , fill = Q14), position = "dodge") +
   labs(title = "Global Health Career Interest by Born outside US", x = "Born outside US?")
+
   # Q12 with Q14
-ggplot(df, aes(x=Q12 , col = Q14)) + geom_bar() +
+ggplot(df) +
+  geom_bar(aes(Q12 , fill = Q14), position = "dodge") +
   labs(title = "Global Health Career Interest by living outside the US", x = "Lived outside US?")
 
 # Regression for Q14
 
 # Frequentest Regression
-model <- lm(Q14. ~ Q2. + Q3. + Q10. + Q12., data=df)
+# Interested in a Career? By Year, Age, Born outside US, Lived outside US
+model <- lm(Q14. ~ Q2. + Q3. + Q10. + Q12., df)
 summary(model)
-# R-squared is 0.09264
-  
+# R-squared is 0.0586
+# Q12 is closest to significant, but not very close at p = .139
+
 # Bayes Regression
 modelString <-"
 model {
