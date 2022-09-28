@@ -7,7 +7,7 @@ library(runjags)
 library(ggplot2)
 
 # read in data
-df0 <- read.csv("Global_Health_data.csv") %>% 
+df0 <- read.csv("Global_Health_data.csv") %>%
   select(20,22,26,36,38:40, 43:45, 47:50) %>% view()
 df0 <- df0[-c(1:2),] %>% view()
 
@@ -35,51 +35,104 @@ ggplot(df, aes(Q14)) +
   geom_bar(fill = 'cornsilk3') +
   labs(title = "Global Health Career Interest?", x = "Responses")
 
-  # Bar Graph of Q2 (Education Count)
+# getting counts of global health interest
+df %>% group_by(Q14) %>% summarise(
+  count = n()
+) # %>% view()
+
+# Bar Graph of Q2 (Education Count)
 ggplot(df, aes(Q2)) + 
   geom_bar(fill = 'cornsilk3') +
-  labs(title = "Education", x = "Years")
+  labs(title = "Education of Respondents", x = "Years")
 
-  # Bar Graph of Q3 (What is your Age Range)
+# getting counts of education
+df %>% group_by(Q2) %>% summarise(
+  count = n()
+) %>% view()
+
+# Bar Graph of Q3 (What is your Age Range)
 ggplot(df, aes(Q3)) + 
   geom_bar(fill = 'cornsilk3') +
-  labs(title = "Age?", x = "Age Range")
+  labs(title = "Age of Respondents", x = "Age Range")
 
-  # Bar Graph of Q10 (Born outside the US?)
+# getting counts of age range
+df %>% group_by(Q3) %>% summarise(
+  count = n()
+) %>% view()
+
+# Bar Graph of Q10 (Born outside the US?)
 ggplot(df, aes(Q10)) +
   geom_bar(fill = 'cornsilk3') +
   labs(title = "Were you born outside the United States?", x = "Responses")
+
+# getting counts of born outside US
+df %>% group_by(Q10) %>% summarise(
+  count = n()
+) %>% view()
 
   # Bar Graph of Q12 (Lived outside the US?)
 ggplot(df, aes(Q12)) +
   geom_bar(fill = 'cornsilk3')  +
   labs(title = "Have you lived outside the United States?", x = "Responses")
 
+# getting counts of lived outside US
+df %>% group_by(Q12) %>% summarise(
+  count = n()
+) %>% view()
+
   # Q2 with Q14 (Global Health Career Interest by Education)
 ggplot(df) +
   geom_bar(aes(Q2, fill = Q14), position = "dodge") +
-  labs(title = "Global Health Career Interest by Education", x = "Years")
+  labs(title = "Global Health Career Interest by Education", x = "Years",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom")
 
-  # Q3 with Q14 (Global Health Career Interest by Age)
+# Counts by education and global health interest
+df %>% group_by(Q2, Q14) %>% summarise(
+  count = n()
+) %>% view()
+
+# Q3 with Q14 (Global Health Career Interest by Age)
 ggplot(df) +
   geom_bar(aes(Q3 , fill = Q14), position = "dodge") +
-  labs(title = "Global Health Career Interest by Age Range", x = "Age Range")
+  labs(title = "Global Health Career Interest by Age Range", x = "Age Range",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom")
 
-  # Q10 with Q14
+# Counts by age and global health interest
+df %>% group_by(Q3, Q14) %>% summarise(
+  count = n()
+) %>% view()
+
+# Q10 with Q14
 ggplot(df) +
   geom_bar(aes(Q10 , fill = Q14), position = "dodge") +
-  labs(title = "Global Health Career Interest by Born outside US", x = "Born outside US?")
+  labs(title = "Global Health Career Interest by Born outside US", x = "Born outside US?",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom")
 
-  # Q12 with Q14
+# Counts by born outside US and global health interest
+df %>% group_by(Q10, Q14) %>% summarise(
+  count = n()
+) %>% view()
+
+# Q12 with Q14
 ggplot(df) +
   geom_bar(aes(Q12 , fill = Q14), position = "dodge") +
-  labs(title = "Global Health Career Interest by living outside the US", x = "Lived outside US?")
+  labs(title = "Global Health Career Interest by living outside the US", x = "Lived outside US?",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom")
+
+# Counts by lived outside US and global health interest
+df %>% group_by(Q12, Q14) %>% summarise(
+  count = n()
+) %>% view()
 
 # Regression for Q14
 
 # Frequentest Regression
 # Interested in a Career? By Year, Age, Born outside US, Lived outside US
-model <- lm(Q14. ~ Q2. + Q3. + Q10. + Q12., df)
+model <- lm(Q14. ~ factor(Q2) + factor(Q3) + Q10. + Q12., df)
 summary(model)
 # R-squared is 0.0586
 # Q12 is closest to significant, but not very close at p = .139

@@ -9,7 +9,7 @@ library(forcats)
 
 #Loading in dataframe and keeping important variables
 df0 <- read.csv("Global_Health_data.csv") %>% 
-  select(20,22,26,36,38:40, 43:45, 47:50) %>% view()
+  select(20,22,26,36,38:40, 43:45, 47:50) # %>% view()
 df <- df0[-c(1:2),] %>% 
   mutate(Q17 = recode(Q17,
                       'Strongly Agree ' = 'Strongly Agree',
@@ -19,53 +19,63 @@ df <- df0[-c(1:2),] %>%
                       'Strongly Agree ' = 'Strongly Agree',
                       'Undecided ' = 'Undecided',
                       'Strongly Disagree ' = 'Strongly Disagree')
-         ) %>% view()
+         ) # %>% view()
 
-#Task 2 -  T test of answers on Q18 by splitting on answers of Q14
-#Bar Graph of Q18
+# Task 2 -  T test of answers on Q18 by splitting on answers of Q14
+# Bar Graph of Q18
 df18 <- df %>% 
-  filter(Q18 != "") %>%
-view()
+  filter(Q18 != "") # %>% view()
 
+# bar graph of are there enough global health opportunities
 ggplot(df18) +
   geom_bar(aes(Q18), fill = 'cornsilk3') +
   labs(title = "Are there enough Global Health Opportunities?",
-       y = "total votes")
+       y = "total votes", x = "Responses")
 
-#Bar Graph of Q14
+
+LOL <- df18 %>% mutate(
+  IDK = if_else(Q18 == "I don't know", 1,0),
+  No = if_else(Q18 == "No", 1,0),
+  Yes = if_else(Q18 == "Yes", 1, 0)
+)
+sum(LOL$IDK)
+sum(LOL$No)
+sum(LOL$Yes)
+
+# Bar Graph of Q14
 df14 <- df %>% 
   filter(Q14 != "") # %>% view()
 
 Q14_Graph <- ggplot(df14, aes(Q14)) +
   geom_bar(fill = 'cornsilk3') +
-  labs(title = "Global Health Career Interest?", y = "Options")
+  labs(title = "Global Health Career Interest?", x = "Responses")
+Q14_Graph
 
 
-#Q18 Responses: No is 0, Yes is 1, I don't know is .5
+# Q18 Responses: No is 0, Yes is 1, I don't know is .5
 DF18 <- df18 %>%
   mutate(Q18 = case_when(
     Q18 == "No" ~ 0,
     Q18 == "Yes" ~ 1,
     Q18 == " I don't know" ~ .5
   )) %>%
-#Q14 Responses: No is 0, Yes is 1, Unsure is also 0
+# Q14 Responses: No is 0, Yes is 1, Unsure is also 0
   mutate(Q14 = case_when(
     Q14 == "No" ~ 0,
     Q14 == "Yes" ~ 1,
     Q14 == "Unsure" ~ 0
   )) %>% view()
 
-#Fix confusing NAs
+# Fix confusing NAs
 DF18$Q18[is.na(DF18$Q18)] = .5
 DF18$Q14[is.na(DF18$Q14)] = 0
 view(DF18)
 
-#df of those interested in global health
+# df of those interested in global health
 Interested_df18 <- DF18 %>%
-  filter(Q14 == 1) %>%
-  view()
+  filter(Q14 == 1) %>% view()
 
-#df of those uninterested or not sure in global health
+# df of those uninterested or not sure in global health
 Uninterested_df18 <- DF18 %>%
   filter(Q14 == 0) %>%
   view()
