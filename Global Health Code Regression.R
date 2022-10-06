@@ -5,9 +5,10 @@ library(mcmcr)
 library(readxl)
 library(runjags)
 library(ggplot2)
+library(readr)
 
 # read in data
-df0 <- read.csv("Global_Health_data.csv") %>%
+df0 <- read_csv("Global_Health_data.csv") %>%
   select(20,22,26,36,38:40, 43:45, 47:50) %>% view()
 df0 <- df0[-c(1:2),] %>% view()
 

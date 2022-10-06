@@ -1,11 +1,11 @@
 library(ggplot2)
 library(tidyverse)
 library(rjags)
-library(plyr)
 library(ProbBayes)
 library(bayesplot)
 library(rstanarm)
 library(forcats)
+library(readr)
 
 #Loading in dataframe and keeping important variables
 df0 <- read.csv("Global_Health_data.csv") %>% 
@@ -32,15 +32,9 @@ ggplot(df18) +
   labs(title = "Are there enough Global Health Opportunities?",
        y = "total votes", x = "Responses")
 
-
-LOL <- df18 %>% mutate(
-  IDK = if_else(Q18 == "I don't know", 1,0),
-  No = if_else(Q18 == "No", 1,0),
-  Yes = if_else(Q18 == "Yes", 1, 0)
-)
-sum(LOL$IDK)
-sum(LOL$No)
-sum(LOL$Yes)
+df18 %>% group_by(Q18) %>% summarise(
+  count = n()
+) # %>% view()
 
 # Bar Graph of Q14
 df14 <- df %>% 
@@ -64,23 +58,22 @@ DF18 <- df18 %>%
     Q14 == "No" ~ 0,
     Q14 == "Yes" ~ 1,
     Q14 == "Unsure" ~ 0
-  )) %>% view()
+  )) # %>% view()
 
 # Fix confusing NAs
 DF18$Q18[is.na(DF18$Q18)] = .5
 DF18$Q14[is.na(DF18$Q14)] = 0
-view(DF18)
+# view(DF18)
 
 # df of those interested in global health
 Interested_df18 <- DF18 %>%
-  filter(Q14 == 1) %>% view()
+  filter(Q14 == 1) # %>% view()
 
 # df of those uninterested or not sure in global health
 Uninterested_df18 <- DF18 %>%
-  filter(Q14 == 0) %>%
-  view()
+  filter(Q14 == 0) # %>% view()
 
-# Frequentist Approach
+# Frequentist Approach counting "IDK as .5"
 # Two Sample t-test is significant
 # p-value of .004335 and 95% Confidence Interval (-.234, -.044)
 # In other words, those interested in global health say there are not enough
@@ -88,6 +81,15 @@ Uninterested_df18 <- DF18 %>%
 # in global health (39.7%)
 # 161 total observations
 t.test(Interested_df18$Q18, Uninterested_df18$Q18)
+# Frequentist Approach removing answers of IDK
+# The two-sample t test is insignificant
+#It had a p-value of .152 and a 95% confidence interval (-.301, .048)
+# In other words, there is not a significant difference in opinion of global 
+# health opportunities among those who are interested (10.9%) and 
+# uninterested (23.5%) in global health
+# There were only 80 observations.
+
+
 
 #Bayesian Approach
 cat("
@@ -139,7 +141,7 @@ plot(samps)
 # Task 2 -  T test of answers on Q17 by splitting on answers of Q14
 # Bar Graph of Q17
 df17 <- df %>% 
-  filter(Q17 != "") %>% view()
+  filter(Q17 != "")#  %>% view()
 
 df17 %>%
   mutate(Q17 = factor(Q17, levels=c("Strongly Agree", "Agree", "Undecided",
@@ -147,7 +149,15 @@ df17 %>%
   ggplot(aes(Q17)) +
     geom_bar(fill = "cornsilk3") +
     labs(title = "Should all Pre-med students take a global health class?",
-       y = "total votes")
+       y = "total votes", x = "Responses")
+
+# counts of should all pre-med students take a global health class
+df17 %>% mutate(Q17 = factor(Q17, levels=c("Strongly Agree", "Agree", "Undecided",
+                                           "Disagree", "Strongly Disagree"))) %>%
+  group_by(Q17) %>%
+  summarise(
+    count = n()
+  ) # %>% view()
 
 # Bar Graph of Q14
 Q14_Graph
@@ -166,7 +176,7 @@ DF17 <- df17 %>%
     Q14 == 'No ' ~ 0,
     Q14 == 'Yes' ~ 1,
     Q14 == 'Unsure' ~ 0
-  )) %>% view()
+  )) # %>% view()
 
 # boxplot of the data
 New_df17 <- df17 %>%
@@ -176,13 +186,14 @@ New_df17 <- df17 %>%
     Q17 == 'Undecided' ~ 0,
     Q17 == 'Agree' ~ 1,
     Q17 == 'Strongly Agree' ~ 2
-  )) %>% view()
+  )) # %>% view()
 
 ggplot(New_df17, aes(Q14, Q17, color = Q14)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 8, outlier.size = 3) +
   labs(x = "Are you interested in pursuing a career in global health?",
        y = "Pre-Meds should take class",
-       title = "Global Health pursual vs class requirements")
+       title = "Global Health Interest and class requirements",
+       color = "")
 
 # dotplot of the data
 ggplot(New_df17, aes(Q14, Q17, color = Q14)) +
@@ -190,7 +201,8 @@ ggplot(New_df17, aes(Q14, Q17, color = Q14)) +
   geom_jitter(shape=16, position=position_jitter(0.05)) +
   labs(x = "Are you interested in pursuing a career in global health?",
        y = "Pre-Meds should take class",
-       title = "Global Health pursual vs class requirements")
+       title = "Global Health pursual vs class requirements",
+       color = "")
 
 # df of those interested in global health
 Interested_df17 <- DF17 %>%
@@ -259,15 +271,25 @@ plot(samps)
 #Task 3 -  T test of answers on Q22 by splitting on answers of Q14
 #Bar Graph of Q22
 df22 <- df %>% 
-  filter(Q22 != "") %>%
+  filter(Q22 != "") # %>%
   view()
 
+# clinical health is important bar graph
 df22 %>% mutate(Q22 = factor(Q22, levels=c("Strongly Agree", "Agree", "Undecided",
                                   "Disagree", "Strongly Disagree"))) %>%
   ggplot(aes(Q22)) +
   geom_bar(fill = "cornsilk3") +
   labs(title = "Practicing Clinal Medicine is the most important step of global health?",
-       y = "total votes")
+       y = "total votes", x= "Responses")
+
+# counts of Clinical health responses
+df22 %>% 
+  mutate(Q22 = factor(Q22, levels=c("Strongly Agree", "Agree", "Undecided",
+                                           "Disagree", "Strongly Disagree"))) %>% 
+  group_by(Q22) %>%
+  summarise(
+    count = n()
+  ) %>% view()
 
 #Bar Graph of Q14
 Q14_Graph
@@ -286,7 +308,7 @@ DF22 <- df22 %>%
     Q14 == 'No' ~ 0,
     Q14 == 'Yes' ~ 1,
     Q14 == 'Unsure' ~ 0
-  )) %>% view()
+  ))# %>% view()
 
 #boxplot of the data
 New_df22 <- df22 %>%
@@ -296,13 +318,13 @@ New_df22 <- df22 %>%
     Q22 == 'Undecided' ~ 0,
     Q22 == 'Agree' ~ 1,
     Q22 == 'Strongly Agree' ~ 2
-  )) %>% view()
+  ))#  %>% view()
 
 
 ggplot(New_df22, aes(Q14, Q22, color = Q14)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 8, outlier.size = 3) +
   labs(x = "Are you interested in pursuing a career in global health?",
-       y = "Clinical medicine is important")
+       y = "Clinical medicine is important", color = "")
 
 
 # dotplot of the data
@@ -310,7 +332,7 @@ ggplot(New_df22, aes(Q14, Q22, color = Q14)) +
   geom_violin(trim = FALSE) +
   geom_jitter(shape = 16, position = position_jitter(.05)) +
   labs(x = "Are you interested in pursuing a career in global health?",
-       y = "Clinical medicine is important")
+       y = "Clinical medicine is important", x = "")
 
 # df of those interested in global health
 Interested_df22 <- DF22 %>%
@@ -326,10 +348,11 @@ Uninterested_df22 <- DF22 %>%
 # p-value of .3914 and 95% Confidence Interval (-.466, .184)
 # In other words, those interested in global health do not have a significantly 
 # different opinion on whether practicing clinical medicine is the most important part of global health
-# The overall means are .226 for Interested Students and .085 for Uninterested students
+# The overall means are .085 for Interested Students and .226 for Uninterested students
 # with 0 being undecided, 1 being agree, and 2 being strongly agree
 t.test(Interested_df22$Q22, Uninterested_df22$Q22)
 
+mean(Interested_df22$Q22)
 #Bayesian Approach
 cat("
 model {
@@ -376,6 +399,7 @@ plot(samps)
 # Below worked for me earlier but for some reason didn't work today
 # mcmc_areas(samps, "mu", prob = .95, point.est = "mean") + 
 # labs(x = expression(mu), title = "Posterior")
+
 
 
 
