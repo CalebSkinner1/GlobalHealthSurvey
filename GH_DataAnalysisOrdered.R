@@ -1,6 +1,6 @@
 # Global Health Data Analysis
 # Author: Caleb Skinner
-# Last Modified: October 25
+# Last Modified: November 1
 
 library(ggplot2)
 library(tidyverse)
@@ -599,13 +599,23 @@ df <- df0[-c(1:2),] %>%
     
     totals <- df16major %>% group_by(Q6) %>% summarise(
       Totals = n()
-    ) 
-    totals %>% group_by(Q6, Disciplines) %>% summarise(
-      Count = n(),
-      Percent = Count
     ) %>% view()
-    
-    
+    df16major %>% group_by(Q6, Disciplines) %>% summarise(
+      Count = n()
+    )
+      
+      
+      Denominator = case_when(
+        totals$Q6 == "Business " ~ totals$Totals[1],
+        totals$Q6 == "Engineering " ~ totals$Totals[2],
+        totals$Q6 == "Literature and language " ~ totals$Totals[3],
+        totals$Q6 == "Math, computing, and data sciences " ~ totals$Totals[4],
+        totals$Q6 == "Natural and physical sciences " ~ totals$Totals[5],
+        totals$Q6 == "Other " ~ totals$Totals[6],
+        totals$Q6 == "Pre-Professional Track" ~ totals$Totals[7],
+        totals$Q6 == "Public health, health sciences, and nursing " ~ totals$Totals[8],
+        totals$Q6 == "Social science " ~ totals$Totals[9]) %>% view()
+
     
     ggplot(df16major, aes(Q6, fill = Disciplines)) +
       geom_bar(position = position_stack(reverse = TRUE)) +
