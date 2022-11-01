@@ -502,7 +502,7 @@ df <- df0[-c(1:2),] %>%
       mutate(
         "Uninterested" = nrow(df16) - Preferred,
         "Percent" = percent((Preferred / nrow(df16)), accuracy = .1)
-      ) # %>% view()
+      ) %>% view()
 
     # creates a barplot of each of the academic disciplines for education training
     # and includes percent selected
@@ -596,6 +596,16 @@ df <- df0[-c(1:2),] %>%
                            Public_Health, Sociology, Language, Ethics), 
                          names_to = "Academic_Disciplines", values_to = "Disciplines") %>%
       filter(Disciplines != 0, Q6 != "") %>% select(-Q23, -Academic_Disciplines) %>% view()
+    
+    totals <- df16major %>% group_by(Q6) %>% summarise(
+      Totals = n()
+    ) 
+    totals %>% group_by(Q6, Disciplines) %>% summarise(
+      Count = n(),
+      Percent = Count
+    ) %>% view()
+    
+    
     
     ggplot(df16major, aes(Q6, fill = Disciplines)) +
       geom_bar(position = position_stack(reverse = TRUE)) +
