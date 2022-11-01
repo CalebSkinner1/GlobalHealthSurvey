@@ -1,5 +1,6 @@
-# Caleb Skinner
-# Last Modified: October 17
+# Global Health Data Analysis
+# Author: Caleb Skinner
+# Last Modified: October 25
 
 library(ggplot2)
 library(tidyverse)
@@ -11,10 +12,14 @@ library(forcats)
 library(readr)
 library(stringr)
 library(scales)
+library(ggpubr)
+library(broom)
+library(AICcmodavg)
+library(waffle)
 
 # loading df- helpful for viewing the questions
 df0 <- read.csv("Global_Health_data.csv") %>%
-  select(20,22:24,26,28,30,36,38:41,43:45,47:50) %>% view()
+  select(20,22:24,26,28,30,36,38:45,47:50) # %>% view()
 
 # removing excess rows and fixing bad responses
 df <- df0[-c(1:2),] %>% 
@@ -37,9 +42,7 @@ df <- df0[-c(1:2),] %>%
                       ),
          Q6 = recode(Q6,
                      'Pre-professional track - only choose this option if you do not have another major that fits into one of the above categories ' = 'Pre-Professional Track')
-  ) %>% view()
-
-df$Q13[49]
+  ) # %>% view()
 
 # What do the respondents look like?
 {
@@ -158,14 +161,14 @@ df$Q13[49]
 {
   # Responses to pursing a career in global health (Q14)
   df14 <- df %>% 
-    filter(Q14 != "") %>% view()
+    filter(Q14 != "") # %>% view()
   # set yes = 1, unsure = .5, and no = 0 for t tests
   df14ttest <- df14 %>%
     mutate(Q14 = case_when(
       Q14 == "Unsure" ~ .5,
       Q14 == "Yes" ~ 1,
       Q14 == "No" ~ 0)
-    ) %>% view()
+    ) # %>% view()
   
   # Bar Graph
   df14 %>%
@@ -286,7 +289,7 @@ df$Q13[49]
       "Non-Profit/Healthcare Admin" = str_count(Q15, "Non-profit and healthcare administration"),
       "Cross-Cultural Experiences" = str_count(Q15, "Cross-cultural experiences"),
       "Number_of_Fields_Selected" = str_count(Q15, ",") + 1 - str_count(Q15, "Not interested in the global health field")
-      ) %>% view()
+      ) # %>% view()
   
     # creates a tibble of the totals
     df15g <- tibble(
@@ -322,8 +325,8 @@ df$Q13[49]
   
   # Results by Lived Outside US
     # converts the list into several columns
-    df15Lived <- df15 %>% filter(Q12 == "Yes") %>% view()
-    df15NotLived <- df15 %>% filter(Q12 == "No") %>% view()
+    df15Lived <- df15 %>% filter(Q12 == "Yes") # %>% view()
+    df15NotLived <- df15 %>% filter(Q12 == "No") # %>% view()
     
     # creates a tibble of the totals
     df15gLive <- tibble(
@@ -355,6 +358,7 @@ df$Q13[49]
         labs(title = "Interest in Global Health Fields", x = "Fields", fill = "Lived Abroad?") +
         geom_text(aes(label = Interested), vjust = -.1, position = position_dodge(width = .9)) +
         scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+      
       # PERCENTS
       ggplot(df15gLive, aes(reorder(Fields, -Decimal), Decimal, fill = Lived_Abroad)) +
         geom_bar(stat = "identity", position = "dodge") +
@@ -363,6 +367,12 @@ df$Q13[49]
         geom_text(aes(label = Percent), vjust = -.3, position = position_dodge(width = .9)) +
         scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
     
+    # Chi-Squared Test- testing independence of the two distributions - percents
+    # the p-value is .2745, cannot conclude that the variations are distinct
+     df15gLiveChi <- df15gLive %>% select(Fields, Lived_Abroad, Percent) %>% 
+      pivot_wider(names_from = Lived_Abroad, values_from = Percent) # %>% view()
+     chisq.test(df15gLiveChi$Yes, df15gLiveChi$No)
+      
     # total number of selections for respondent
     full_join(df15Lived %>% 
                  group_by(Number_of_Fields_Selected) %>% 
@@ -377,6 +387,14 @@ df$Q13[49]
            y= "Percent", fill = "Lived Abroad") +
       geom_text(aes(label = Percent), vjust = -.3, position = position_dodge(width = .9))
     
+    # Chi-Squared Test- testing independence of the two distributions - total number of fields
+    # the p-value is .2745, cannot conclude that the variations are distinct
+    df15gLiveChiTotals <- full_join(df15Lived %>% 
+                group_by(Number_of_Fields_Selected) %>% 
+                summarise(Yes = n()/nrow(df15Lived)), 
+              df15NotLived %>% group_by(Number_of_Fields_Selected) %>% 
+                summarise(No = n()/nrow(df15NotLived))) # %>% view()
+    chisq.test(df15gLiveChiTotals$Yes, df15gLiveChiTotals$No)
     
   # Results by Born Outside US
     # converts the list into several columns
@@ -413,6 +431,7 @@ df$Q13[49]
       labs(title = "Interest in Global Health Fields", x = "Fields", fill = "Born Abroad?") +
       geom_text(aes(label = Interested), vjust = -.1, position = position_dodge(width = .9)) +
       scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    
     # PERCENTS
     ggplot(df15gBorn, aes(reorder(Fields, -Decimal), Decimal, fill = Born_Abroad)) +
       geom_bar(stat = "identity", position = "dodge") +
@@ -420,6 +439,12 @@ df$Q13[49]
            x = "Fields", fill = "Born Abroad?", y = "Percent") +
       geom_text(aes(label = Percent), vjust = -.3, position = position_dodge(width = .9)) +
       scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    
+    # Chi-Squared Test- testing independence of the two distributions - percents
+    # the p-value is .3287, cannot conclude that the variations are distinct
+    df15gBornChi <- df15gBorn %>% select(Fields, Born_Abroad, Percent) %>% 
+      pivot_wider(names_from = Born_Abroad, values_from = Percent) # %>% view()
+    chisq.test(df15gBornChi$Yes, df15gBornChi$No)
     
     # total number of selections for respondent
     full_join(df15Born %>% 
@@ -434,9 +459,162 @@ df$Q13[49]
       labs(title = "Total Fields Interested In", x = "Total Fields Selected", 
            y= "Percent", fill = "Born Abroad") +
       geom_text(aes(label = Percent), vjust = -.3, position = position_dodge(width = .9))
+    
+    # Chi-Squared Test- testing independence of the two distributions - total number of fields
+    # the p-value is .2627, cannot conclude that the variations are distinct
+    df15gBornChiTotals <- full_join(df15Born %>% 
+                                      group_by(Number_of_Fields_Selected) %>% 
+                                      summarise(Yes = n()/nrow(df15Born)), 
+                                    df15NotLived %>% group_by(Number_of_Fields_Selected) %>% 
+                                      summarise(No = n()/nrow(df15NotBorn))) # %>% view()
+    chisq.test(df15gBornChiTotals$Yes, df15gBornChiTotals$No)
+    
 }
 
+# Physicians who work within global health (domestic or international) should
+# have educational training in which THREE academic disciplines?
+{
+  df %>% filter(Q16 != "")  %>% select(Q16) %>% view()
+  
+  # Results of overall education training question
+    # converts the list into several columns
+    df16 <- df %>% filter(Q16 != "") %>% mutate(
+      Economics = str_count(Q16, "Economics"),
+      Business = str_count(Q16, "Business"),
+      Law = str_count(Q16, "Law"),
+      Anthropology = str_count(Q16, "Anthropology"),
+      Policy_Advocacy = str_count(Q16, "Policy and Advocacy"),
+      Public_Health = str_count(Q16, "Public Health"),
+      Sociology = str_count(Q16, "Sociology"),
+      Language = str_count(Q16, "Language"),
+      Ethics = str_count(Q16, "Ethics"),
+      Total_Academic_Disciplines = str_count(Q16, ",") + 1
+    ) # %>% view()
+  
+    # creates a tibble of the totals
+    df16g <- tibble(
+      Disciplines = c("Economics", "Business", "Law", "Anthropology", "Policy_Advocacy",
+                   "Public_Health", "Sociology", "Language", "Ethics"),
+      Preferred = c(sum(df16$Economics), sum(df16$Business), sum(df16$Law), sum(df16$Anthropology),
+                       sum(df16$Policy_Advocacy), sum(df16$Public_Health),
+                       sum(df16$Sociology), sum(df16$Language),
+                       sum(df16$Ethics))) %>%
+      mutate(
+        "Uninterested" = nrow(df16) - Preferred,
+        "Percent" = percent((Preferred / nrow(df16)), accuracy = .1)
+      ) # %>% view()
 
+    # creates a barplot of each of the academic disciplines for education training
+    # and includes percent selected
+    ggplot(df16g, aes(reorder(Fields, -Preferred), Preferred)) +
+      geom_bar(stat = "identity", fill = 'cornsilk3') +
+      labs(title = "Important Academic Disciplines", x = "Disciplines") +
+      geom_text(aes(label = Percent), nudge_y = 3) +
+      scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    
+    # total number of selections for respondent
+    df16 %>% group_by(Total_Academic_Disciplines) %>%
+      summarise(
+        Count = n()
+      ) %>% 
+      ggplot(aes(Total_Academic_Disciplines, Count)) +
+      geom_bar(stat = "identity", fill = 'cornsilk3') +
+      labs(title = "Total Academic Disciplines Selected", x = "Total Discplines Selected") +
+      geom_text(aes(label = signif(Count)), nudge_y = 1) +
+      scale_x_continuous(breaks = seq(1,9, by = 1))
+    
+    # Academic disciplines preferred by Interest in Global Health
+    df16Int <- df16 %>% filter(Q14 == "Yes") #%>% view()
+    df16NotInt <- df16 %>% filter(Q14 == "No") #%>% view()
+    df16UnsureInt <- df16 %>% filter(Q14 == "Unsure") #%>% view()
+    
+    df16gInt <- tibble(
+      Disciplines = c("Economics", "Economics", "Economics", "Business", "Business", 
+                        "Business", "Law", "Law", "Law", "Anthropology", "Anthropology", 
+                        "Anthropology", "Policy_Advocacy", "Policy_Advocacy", "Policy_Advocacy",
+                        "Public_Health", "Public_Health", "Public_Health", "Sociology",
+                        "Sociology", "Sociology", "Language", "Language", "Language",
+                        "Ethics", "Ethics", "Ethics"),
+      GH_Interest = c("Yes", "No", "Unsure", "Yes", "No", "Unsure", "Yes", "No", "Unsure",
+                      "Yes", "No", "Unsure", "Yes", "No", "Unsure", "Yes", "No", "Unsure",
+                      "Yes", "No", "Unsure", "Yes", "No", "Unsure", "Yes", "No", "Unsure"),
+      Preferred = c(sum(df16Int$Economics),sum(df16NotInt$Economics),sum(df16UnsureInt$Economics),
+                       sum(df16Int$Business),sum(df16NotInt$Business),sum(df16UnsureInt$Business),
+                       sum(df16Int$Law),sum(df16NotInt$Law),sum(df16UnsureInt$Law),
+                       sum(df16Int$Anthropology),sum(df16NotInt$Anthropology),sum(df16UnsureInt$Anthropology),
+                       sum(df16Int$Policy_Advocacy),sum(df16NotInt$Policy_Advocacy),sum(df16UnsureInt$Policy_Advocacy),
+                       sum(df16Int$Public_Health),sum(df16NotInt$Public_Health),sum(df16UnsureInt$Public_Health),
+                       sum(df16Int$Sociology),sum(df16NotInt$Sociology),sum(df16UnsureInt$Sociology),
+                       sum(df16Int$Language),sum(df16NotInt$Language),sum(df16UnsureInt$Language),
+                       sum(df16Int$Ethics),sum(df16NotInt$Ethics),sum(df16UnsureInt$Ethics)
+                       )
+    ) %>% mutate(
+      Decimal = as.double(if_else(GH_Interest == "Yes", Preferred/nrow(df16Int), 
+                                  if_else(GH_Interest == "No", Preferred/nrow(df16NotInt), Preferred/nrow(df16UnsureInt)))),
+      Percent = percent(Decimal,accuracy = .1)
+      ) %>% view()
+    
+    # creates a barplot of each of the Academic Disciplines and Compares
+    # Interested in Global Health to not Interested
+    # TOTALS
+    ggplot(df16gInt, aes(reorder(Disciplines, -Preferred), Preferred, fill = GH_Interest)) +
+      geom_bar(stat = "identity", position = "dodge") +
+      labs(title = "Preferred Academic Disciplines", x = "Disciplines", fill = "Interest in Global Health") +
+      geom_text(aes(label = Preferred), vjust = -.2, position = position_dodge(width = .9)) +
+      scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    
+    # PERCENTS
+    ggplot(df16gInt, aes(reorder(Disciplines, -Decimal), Decimal, fill = GH_Interest)) +
+      geom_bar(stat = "identity", position = "dodge") +
+      labs(title = "Respondents' prefereance in the following Academic Disciplines",
+           x = "Disciplines", fill = "Global Health Interest", y = "Percent") +
+      geom_text(aes(label = Percent), vjust = -.3, position = position_dodge(width = .9)) +
+      scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    
+    # Chi-Squared Test- testing independence of the two distributions - percents
+    # This tests to see if the distribution of Nos is significantly different from
+    # the distributions of Yes's
+    # the p-value is .2303, cannot conclude that the variations are distinct
+    
+    df16gIntChi <- df16gInt %>% select(Disciplines, GH_Interest, Percent) %>% 
+      pivot_wider(names_from = GH_Interest, values_from = Percent) # %>% view()
+    chisq.test(df16gIntChi$Yes, df16gIntChi$No)
+    
+    # Academic disciplines preferred by major
+    # refiltering out the data
+    df16major <- df16 %>% mutate(
+      Economics = replace(Economics,Economics == 1, "Economics"),
+      Business = replace(Business,Business == 1, "Business"),
+      Law = replace(Law,Law == 1, "Law"),
+      Anthropology = replace(Anthropology,Anthropology == 1, "Anthropology"),
+      Policy_Advocacy = replace(Policy_Advocacy,Policy_Advocacy == 1, "Policy_Advocacy"),
+      Public_Health = replace(Public_Health,Public_Health == 1, "Public_Health"),
+      Sociology = replace(Sociology,Sociology == 1, "Sociology"),
+      Language = replace(Language,Language == 1, "Language"),
+      Ethics = replace(Ethics,Ethics == 1, "Ethics")
+      ) %>% pivot_longer(c(Economics, Business, Law, Anthropology, Policy_Advocacy,
+                           Public_Health, Sociology, Language, Ethics), 
+                         names_to = "Academic_Disciplines", values_to = "Disciplines") %>%
+      filter(Disciplines != 0, Q6 != "") %>% select(-Q23, -Academic_Disciplines) %>% view()
+    
+    ggplot(df16major, aes(Q6, fill = Disciplines)) +
+      geom_bar(position = position_stack(reverse = TRUE)) +
+      guides(fill = guide_legend(reverse = TRUE)) +
+      scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+    
+    
+    
+    
+    ggplot(df16major, aes(values = ceiling, fill = Disciplines)) +
+      waffle::geom_waffle(n_rows = 10, color = "white", flip = TRUE) +
+      facet_wrap(~ Q6, nrow = 1, strip.position = "bottom") +
+      scale_x_continuous(breaks = NULL) +
+      scale_y_continuous(labels = function(y) 10*25*y) +
+      guides(fill = guide_legend(reverse = TRUE))
+head(df16$Q6)
+  
+    
+}
 
 
 
