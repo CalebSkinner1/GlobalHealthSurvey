@@ -1,0 +1,26 @@
+{
+    "id": "3ADBCC3E",
+    "path": "~/Desktop/Rock Chucks/Miscellaneous/Coding/R Projects/globalhealth/GH_DataAnalysisOrdered.R",
+    "project_path": "GH_DataAnalysisOrdered.R",
+    "type": "r_source",
+    "hash": "3106230757",
+    "contents": "",
+    "dirty": false,
+    "created": 1667450032448.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "697,2",
+        "scrollLine": "483"
+    },
+    "folds": "163|1|279|2|\n486|1|637|0|\n642|1|691|0|\n",
+    "lastKnownWriteTime": 1668388043,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1668388043263,
+    "read_only": false,
+    "read_only_alternatives": []
+}
