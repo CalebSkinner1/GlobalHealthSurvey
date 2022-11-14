@@ -1,6 +1,6 @@
 # Global Health Data Analysis
 # Author: Caleb Skinner
-# Last Modified: November 1
+# Last Modified: November 13
 
 library(ggplot2)
 library(tidyverse)
@@ -641,7 +641,7 @@ df <- df0[-c(1:2),] %>%
 # pre-medical students to learn more about global health and gain experience in
 # the field prior to medical school?
 {
-  df %>% filter(Q19 != "")  %>% select(Q19) %>% distinct() %>% view()
+  df %>% filter(Q19 != "")  %>% select(Q19) %>% distinct() # %>% view()
   
   df19 <- df %>% filter(Q19 != "") %>% mutate(
     Faculty = str_count(Q19, "Lack of global health faculty"),
@@ -694,54 +694,60 @@ df <- df0[-c(1:2),] %>%
 # What do you think should be required for pre-medical students to engage in 
 # clinical global health work and/or mission trips? (select all that apply)
 {
-  df %>% filter(Q20 != "")  %>% select(Q19) %>% distinct() %>% view()
+  df %>% filter(Q20 != "")  %>% select(Q20) %>% distinct() %>% view()
   
-  df19 <- df %>% filter(Q19 != "") %>% mutate(
-    Faculty = str_count(Q19, "Lack of global health faculty"),
-    Extracurricular = str_count(Q19, "Lack of extracurricular opportunities"),
-    Busyness = str_count(Q19, "Time constraints"),
-    Financial = str_count(Q19, "Financial barriers"),
-    Research = str_count(Q19, "research opportunities"),
-    Ethical_Issues = str_count(Q19, "Ethical issues"),
-    Physician_Mentorship = str_count(Q19, "Lack of mentorship"),
-    Other = str_count(Q19, "Other"),
-    Total_Problems = rowSums(across(where(is.numeric)))
-  ) # %>% view()
-  df19g <- df19 %>% summarise(
-    Faculty = sum(Faculty),
-    Extracurricular = sum(Extracurricular),
-    Busyness = sum(Busyness),
-    Financial = sum(Financial),
-    Research = sum(Research),
-    Ethical_Issues = sum(Ethical_Issues),
-    Physician_Mentorship = sum(Physician_Mentorship),
-    Other = sum(Other)
+  df20 <- df %>% filter(Q20 != "") %>% mutate(
+    Clinical_Certification = str_count(Q20, "clinical certification"),
+    Cultural_Education = str_count(Q20, "Education on the community"),
+    Local_Language = str_count(Q20, "Knowledge of the local language"),
+    Medical_Ethics = str_count(Q20, "Medical ethics education"),
+    Volunteer_Experience = str_count(Q20, "volunteer experience"),
+    Nonclinical_role = str_count(Q20, "non-clinical role on the mission trip"),
+    No_Undergrad_Mission_Trips = str_count(Q20, "Undergraduates should never"),
+    Total_Conditions = rowSums(across(where(is.numeric)))
+  ) %>% view()
+  df20g <- df20 %>% summarise(
+    "Clinical Certification" = sum(Clinical_Certification),
+    "Cultural Education" = sum(Cultural_Education),
+    "Local Language Training" = sum(Local_Language),
+    "Medical Ethics Education" = sum(Medical_Ethics),
+    "Volunteer Experience" = sum(Volunteer_Experience),
+    "Non-clinical role on mission trip" = sum(Nonclinical_role),
+    "Undergraduates should not engage in Mission Trips" = sum(No_Undergrad_Mission_Trips)
   ) %>%
-    t() # %>% view()
-  df19g <- rownames_to_column(df19g,var = "rowname")
-  colnames(df19g) <- c("Problems", "Count")
-  df19g <- df19g %>% mutate(
+    t() %>% view()
+  df20g <- rownames_to_column(df20g,var = "rowname")
+  colnames(df20g) <- c("Conditions", "Count")
+  df20g <- df20g %>% mutate(
     Percent = percent(Count/nrow(df %>% filter(Q19 != "")), accuracy = .1)
-  ) # %>% view()
+  ) %>% view()
   
-  # creates a barplot of each of the academic disciplines for education training
+  # creates a barplot of each of the conditions to engage in global health work/mission trip
   # and includes percent selected
-  ggplot(df19g, aes(reorder(Problems, -Count), Count)) +
+  ggplot(df20g, aes(reorder(Conditions, -Count), Count)) +
     geom_bar(stat = "identity", fill = 'cornsilk3') +
-    labs(title = "Hinderances to Global Health Recognition", x = "Hinderances") +
+    labs(title = "Requirements for pre-medical students to engage in 
+         clinical global health work and/or mission trips", x = "Requirements") +
     geom_text(aes(label = Percent), nudge_y = 3) +
-    scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+    scale_x_discrete(labels = function(x) str_wrap(x,width = 20))
   
   # total number of selections for respondent
-  df19 %>% group_by(Total_Problems) %>%
+  df20 %>% group_by(Total_Conditions) %>%
     summarise(
       Count = n()
     ) %>% 
-    ggplot(aes(Total_Problems, Count)) +
+    ggplot(aes(Total_Conditions, Count)) +
     geom_bar(stat = "identity", fill = 'cornsilk3') +
-    labs(title = "Total Hinderances to Global Health Selected", x = "Total Hinderances Selected") +
+    labs(title = "Total Conditions to engage in Global Health Work/Mission Trips",
+         x = "Total Conditions Selected") +
     geom_text(aes(label = signif(Count)), nudge_y = 1) +
     scale_x_continuous(breaks = seq(1,9, by = 1))
+}
+
+# Short-term mission trips are an effective way to address global health challenges.
+{
+  df %>% filter(Q21 != "") %>% select(Q21) %>% distinct() %>% view()
+  
 }
 
 
