@@ -1,0 +1,487 @@
+---
+format: 
+  pdf:
+    keep-tex: true
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "#", fig.height = 3, 
+  cache = FALSE,  collapse = TRUE,
+  error = TRUE, echo = FALSE,
+  message = FALSE
+)
+```
+
+<!-- put your name below instead of mine -->
+
+Caleb Skinner
+
+Global Health Survey Questions 6-10
+
+<!-- Setting up tidyverse. Reading in the csv and all that bonkers stuff -->
+```{r}
+#| include: false
+library("here")
+library("tidyverse"); theme_set(theme_minimal())
+library(rjags)
+library(rstanarm)
+library(scales)
+library(ggpubr)
+library(broom)
+library(AICcmodavg)
+library(waffle)
+library(gtsummary)
+
+# loading df- helpful for viewing the questions
+file_name <- here("Global_Health_data.csv")
+df0 <- read_csv(file_name) %>%
+  select(20,22:24,26,28,30,36,38:45,47:50, 73:74) # %>% view()
+# The ranked ones are from 51-72
+
+# removing excess rows and fixing bad responses
+df <- df0[-c(1:2),] %>% 
+  mutate(Q17 = recode(Q17,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+         Q22 = recode(Q22,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+         Q14 = recode(Q14,
+                      'No ' = 'No'),
+         Q13 = recode(Q13,
+                      '15+ years ' = '15+ years',
+                      '5 - 10 years ' = '5 - 10 years',
+                      '10 - 15 years ' = '10 - 15 years',
+                      '1 - 5 years ' = '1 - 5 years',
+                      'Less than one year ' = 'Less than one year'
+         ),
+         Q6 = recode(Q6,
+                     'Pre-professional track - only choose this option if you do not have another major that fits into one of the above categories' = 'Pre-Professional Track'),
+         Q18 = recode(Q18,
+                      'I don’t know' = "I don't know")
+  )
+```
+
+## Questions:
+
+## 6. In your opinion, are there enough global health opportunities available to US pre-medical students?
+
+A. Overall Results for Global Health Opportunities Availability.
+
+```{r}
+YNResponses <- c("Yes", "I don't know", "No")
+df18 <- df %>% 
+  filter(Q18 != "") %>% mutate(
+    factor(Q18, YNResponses)
+  )
+
+df18ttest <- df18 %>%
+  mutate(Q18 = case_when(
+    Q18 == "I don't know" ~ .5,
+    Q18 == "Yes" ~ 1,
+    Q18 == "No" ~ 0)
+  )
+
+df18 %>%
+  group_by(Q18) %>%
+  summarise(
+    Counts = n()
+  ) %>% ggplot(aes(fct_relevel(Q18, YNResponses), Counts)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Are there enough global health opportunities?", x = "", y = "") +
+  geom_text(aes(label = signif(Counts)), nudge_y = 3)
+```
+
+\newpage
+
+B. Global Health Opportunities by Global Health Career Interest
+
+```{r}
+df18Int <- df18 %>%
+  filter(Q14 != "") %>% 
+  group_by(Q14, Q18) %>%
+  summarise(
+    Count = n()
+  )
+ggplot(df18Int, aes(Q14, Count, fill = fct_relevel(Q18, YNResponses))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Opportunities in Global Health by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Enough Global Health Opportunities:", y = "") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9)) +
+  scale_y_continuous(limit = c(0, 43))
+```
+
+```{r}
+df18Int %>% group_by(Q14) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(reorder(Q14, Count), Decimal,
+             fill = fct_relevel(Q18, YNResponses))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 11)) +
+  labs(title = "Opportunities in Global Health by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Enough Global Health Opportunities:",
+       y = "") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9),
+            size = 3) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1),
+    limits = c(0,.65)
+  )
+```
+
+\newpage
+
+The following is a t-test measuring the difference in belief that there are sufficient Global Health opportunities for pre-med students in those who have expressed interest in a Global Health Career and those who have not. For this t-test, I counted "I don't know" responses to the sufficient Global Health Opportunities Question as 1/2 a "yes" and 1/2 a "no".
+The results are significant. Those who have express an interest in a Global Health Career indicate that there are not sufficient Global Health Opportunities at a higher rate than those who have not expressed an interest in a Global Health Career.
+
+```{r}
+t.test(df18ttest %>% filter(Q14 == "No") %>% select(Q18),
+       df18ttest %>% filter(Q14 == "Yes") %>% select(Q18))
+```
+
+The following is a second t-test measuring the difference in belief that there are sufficient Global Health opportunities for pre-med students in those who have expressed interest in a Global Health Career and those who have not. For this t-test, I removed all "I don't know" responses.
+The results are not significant. This is likely because a large amount of respondents selected "I don't know." This drops the sample size to only 80.
+
+```{r}
+t.test(df18ttest %>% filter(Q14 == "No", Q18 != .5) %>% select(Q18),
+       df18ttest %>% filter(Q14 == "Yes", Q18 != .5) %>% select(Q18))
+```
+
+\newpage
+
+## 7. Which, if any, of the following do you perceive as reasons it is difficult for undergraduate pre-medical students to learn more about global health and gain experience in the field prior to medical school?
+
+```{r}
+df19 <- df %>% filter(Q19 != "") %>% mutate(
+  Faculty = str_count(Q19, "Lack of global health faculty"),
+  Extracurricular = str_count(Q19, "Lack of extracurricular opportunities"),
+  Busyness = str_count(Q19, "Time constraints"),
+  Financial = str_count(Q19, "Financial barriers"),
+  Research = str_count(Q19, "research opportunities"),
+  Ethical_Issues = str_count(Q19, "Ethical issues"),
+  Physician_Mentorship = str_count(Q19, "Lack of mentorship"),
+  Other = str_count(Q19, "Other"),
+  Total_Problems = rowSums(across(where(is.numeric)))
+) %>% view()
+df19g <- df19 %>% summarise(
+  'Lacking Faculty Mentorship' = sum(Faculty),
+  'Lacking Extracurricular Opportunities' = sum(Extracurricular),
+  Busyness = sum(Busyness),
+  Financial = sum(Financial),
+  'Lacking Research Opportunities' = sum(Research),
+  'Ethical Issues' = sum(Ethical_Issues),
+  'Lacking Physician Mentorship' = sum(Physician_Mentorship),
+  Other = sum(Other)
+) %>%
+  t() %>% as.data.frame() %>% rownames_to_column(var = "rowname") # %>% view()
+colnames(df19g) <- c("Problems", "Count")
+df19g <- df19g %>% mutate(
+  Percent = percent(Count/nrow(df %>% filter(Q19 != "")), accuracy = .1)
+) # %>% view()
+
+# creates a barplot of each of the academic disciplines for education training
+# and includes percent selected
+ggplot(df19g, aes(reorder(Problems, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Hindrances to Global Health Awareness and Experience",
+       x = "Hindrances", y ="") +
+  geom_text(aes(label = Percent), nudge_y = 5.5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limit = c(0,140)) +
+  theme(axis.text.x = element_text(size = 6.8))
+```
+
+```{r}
+df19 %>% group_by(Total_Problems) %>%
+  summarise(
+    Count = n()
+  ) %>% 
+  ggplot(aes(Total_Problems, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Total Hindrances to Global Health", x = "", y = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 2) +
+  scale_x_continuous(breaks = seq(1,9, by = 1))
+```
+
+\newpage
+
+## 8. What do you think should be required for pre-medical students to engage in clinical global health work and/or mission trips?
+
+```{r}
+df20 <- df %>% filter(Q20 != "") %>% mutate(
+  Clinical_Certification = str_count(Q20, "clinical certification"),
+  Cultural_Education = str_count(Q20, "Education on the community"),
+  Local_Language = str_count(Q20, "Knowledge of the local language"),
+  Medical_Ethics = str_count(Q20, "Medical ethics education"),
+  Volunteer_Experience = str_count(Q20, "volunteer experience"),
+  Nonclinical_role = str_count(Q20, "non-clinical role on the mission trip"),
+  No_Undergrad_Mission_Trips = str_count(Q20, "Undergraduates should never"),
+  Total_Conditions = rowSums(across(where(is.numeric)))
+) # %>% view()
+df20g <- df20 %>% summarise(
+  "Clinical Certification" = sum(Clinical_Certification),
+  "Cultural Education" = sum(Cultural_Education),
+  "Local Language Training" = sum(Local_Language),
+  "Medical Ethics Education" = sum(Medical_Ethics),
+  "Volunteer Experience" = sum(Volunteer_Experience),
+  "Non-clinical role on mission trip" = sum(Nonclinical_role),
+  "Undergraduates should not engage in Mission Trips" = sum(No_Undergrad_Mission_Trips)
+) %>%
+  t() %>% as.data.frame() %>% rownames_to_column(var = "rowname") %>% view()
+colnames(df20g) <- c("Conditions", "Count")
+df20g <- df20g %>% mutate(
+  Percent = percent(Count/nrow(df %>% filter(Q19 != "")), accuracy = .1)
+)
+# creates a barplot of each of the conditions to engage in global health work/mission trip
+# and includes percent selected
+ggplot(df20g, aes(reorder(Conditions, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Requirements for pre-medical students to engage in 
+         clinical global health work and/or mission trips", x = "Requirements", y = "") +
+  geom_text(aes(label = Percent), nudge_y = 5, size = 3.1) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 15)) +
+  scale_y_continuous(limits = c(0,120)) +
+  theme(axis.text.x = element_text(size = 7))
+```
+
+```{r}
+df20 %>% group_by(Total_Conditions) %>%
+  summarise(
+    Count = n()
+  ) %>% 
+  ggplot(aes(Total_Conditions, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Conditions Needed to engage in Global Health Work/Missions",
+       x = "", y = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 2.5) +
+  scale_x_continuous(breaks = seq(1,9, by = 1)) +
+  scale_y_continuous(limits = c(0,60))
+```
+
+\newpage
+
+## 9. Short-term mission trips are an effective way to address global health challenges.
+
+A. Overall Results
+
+```{r}
+Response_levels <- c("Strongly Agree", "Agree", "Undecided", "Disagree", "Strongly Disagree")
+df21 <- df %>% filter(Q21 != "") %>%
+  mutate(
+    factor(Q21, levels = Response_levels)
+  )
+# Bar Graph
+df21 %>%
+  group_by(Q21) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(fct_relevel(Q21, Response_levels), Count)) +
+  geom_bar(stat = "identity", fill = "cornsilk3") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3) +
+  labs(title = "Short-term mission trips are effective",
+       x = "", y = "") +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+```
+
+\newpage
+
+B. Effectiveness of Mission Trips by Lived Abroad
+
+```{r}
+df21gLive <- df21 %>%
+  filter(Q12 != "") %>% 
+  group_by(Q12, Q21) %>%
+  summarise(
+    Count = n()
+  ) # %>% view()
+ggplot(df21gLive, aes(Q12, Count, fill = fct_relevel(Q21, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effectiveness of Short-term missions by Lived Abroad",
+       x = "Lived Abroad",
+       fill = "Missions are Effective:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0, 60))
+```
+
+```{r}
+df21gLive %>% group_by(Q12) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(Q12, Decimal, fill = fct_relevel(Q21, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effectiveness of Short-term missions by Lived Abroad",
+       x = "Lived Abroad",
+       fill = "Missions are Effective:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9), size = 2.5) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  )
+```
+
+\newpage
+
+C. Effectiveness of Mission Trips by Born Abroad
+
+```{r}
+df21gBorn <- df21 %>%
+  filter(Q10 != "") %>% 
+  group_by(Q10, Q21) %>%
+  summarise(
+    Count = n()
+  ) # %>% view()
+ggplot(df21gBorn, aes(Q10, Count, fill = fct_relevel(Q21, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effectiveness of Short-term missions by Born Abroad",
+       x = "Born Abroad",
+       fill = "Missions are Effective:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0, 60))
+```
+
+```{r}
+df21gBorn %>% group_by(Q10) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(Q10, Decimal, fill = fct_relevel(Q21, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effectiveness of Short-term missions by Lived Abroad",
+       x = "Lived Abroad",
+       fill = "Missions are Effective:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9), size = 2.5) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  )
+```
+
+\newpage
+
+## 10. Practicing clinical medicine is the most important aspect of global health.
+
+A. Overall Results
+
+```{r}
+df22 <- df %>% filter(Q22 != "") %>%
+  mutate(
+    factor(Q22, levels = Response_levels)
+  )
+# Bar Graph
+df22 %>%
+  group_by(Q22) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(fct_relevel(Q22, Response_levels), Count)) +
+  geom_bar(stat = "identity", fill = "cornsilk3") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3) +
+  labs(title = "Practicing clinical medicine is the most important part of Global Health",
+       x = "", y = "") +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+```
+
+\newpage
+
+B. Importance of Clinical Medicine by Major
+
+```{r}
+#| fig-height: 4
+df22gLive <- df22 %>%
+  filter(Q6 != "") %>% 
+  group_by(Q6, Q22) %>%
+  summarise(
+    Count = n()
+  ) %>% group_by(Q6) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  )
+ggplot(df22gLive, aes(reorder(Q6, -Count), Decimal, fill = fct_relevel(Q22, Response_levels))) +
+  geom_bar(stat = "identity", position = position_stack()) +
+  labs(title = "Importance of Clinical Medicine by Major",
+       x = "", fill = "Clinical Medicine is Important: ", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 6),
+        legend.text = element_text(size = 5.5),
+        axis.text.x = element_text(size = 7)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 12)) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1),
+  )
+```
+
+\newpage
+
+C. Importance of Clinical Medicine by Global Health Interest
+
+```{r}
+df22gInt <- df22 %>%
+  filter(Q12 != "") %>% 
+  group_by(Q12, Q22) %>%
+  summarise(
+    Count = n()
+  ) # %>% view()
+ggplot(df22gInt, aes(Q12, Count, fill = fct_relevel(Q22, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Importance of Clinical Medicine by Global Health Interest",
+       x = "Interest in a Global Health Career",
+       fill = "Clinical Medicine is Important:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 6),
+        legend.text = element_text(size = 5.5)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0, 50))
+```
+
+```{r}
+df22gInt %>% group_by(Q12) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(Q12, Decimal, fill = fct_relevel(Q22, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Importance of Clinical Medicine by Global Health Interest",
+       x = "Interest in a Global Health Career",
+       fill = "Clinical Medicine is Important:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 6),
+        legend.text = element_text(size = 5.5)) +
+  geom_text(aes(label = Percent), vjust = -.2,
+            position = position_dodge(width = .9), size = 2.5) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  )
+```

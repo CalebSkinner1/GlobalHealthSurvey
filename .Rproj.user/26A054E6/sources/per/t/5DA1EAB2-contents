@@ -1,0 +1,583 @@
+---
+format: 
+  pdf:
+    keep-tex: true
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "#", fig.height = 3, 
+  cache = FALSE,  collapse = TRUE,
+  error = TRUE, echo = FALSE,
+  message = FALSE
+)
+```
+
+<!-- put your name below instead of mine -->
+
+Caleb Skinner
+
+Global Health Survey Questions 11-15
+
+<!-- Setting up tidyverse. Reading in the csv and all that bonkers stuff -->
+```{r}
+#| include: false
+library("here")
+library("tidyverse"); theme_set(theme_minimal())
+library(rjags)
+library(rstanarm)
+library(scales)
+library(ggpubr)
+library(broom)
+library(AICcmodavg)
+library(waffle)
+library(gtsummary)
+
+# loading df- helpful for viewing the questions
+file_name <- here("Global_Health_data.csv")
+df0 <- read_csv(file_name) %>%
+  select(20,22:24,26,28,30,36,38:45,47:74) %>% view()
+# The ranked ones are from 51-72
+
+# removing excess rows and fixing bad responses
+df <- df0[-c(1:2),] %>% 
+  mutate(Q17 = recode(Q17,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+         Q22 = recode(Q22,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+         Q14 = recode(Q14,
+                      'No ' = 'No'),
+         Q13 = recode(Q13,
+                      '15+ years ' = '15+ years',
+                      '5 - 10 years ' = '5 - 10 years',
+                      '10 - 15 years ' = '10 - 15 years',
+                      '1 - 5 years ' = '1 - 5 years',
+                      'Less than one year ' = 'Less than one year'
+         ),
+         Q6 = recode(Q6,
+                     'Pre-professional track - only choose this option if you do not have another major that fits into one of the above categories' = 'Pre-Professional Track'),
+         Q18 = recode(Q18,
+                      'I don’t know' = "I don't know")
+  )
+```
+
+## Questions:
+
+## 11. In your opinion, what are the greatest barriers to providing healthcare in low-resource settings?
+
+A. Overall Results for Barriers to Providing Healthcare to Low-Resource Settings
+
+```{r}
+df23 <- df %>%
+  filter(Q23 != "") %>%
+  mutate(
+    "Physician Supply" = str_count(Q23, "Physician supply"),
+    "Lack of Equipment" = str_count(Q23, "Lack of medical equipment"),
+    "Lack of Payment" = str_count(Q23, "Lack of health insurance"),
+    "Lack of Patient Education" = str_count(Q23, "Lack of patient education"),
+    "Language Barriers" = str_count(Q23, "Language barriers"),
+    "Transportation Barriers" = str_count(Q23, "Transportation barriers"),
+    "Infrastructure" = str_count(Q23, "Infrastructure"),
+    "Number of Fields Selected" = str_count(Q23, ",") + 1
+  )
+
+# creates a tibble of the totals
+df23g <- tibble(
+  "Barriers" = c("Physician Supply", "Lack of Equipment",
+               "Lack of Payment", "Lack of Patient Education",
+               "Language Barriers", "Transportation Barriers",
+               "Infrastructure"),
+  "Votes" = c(sum(df23$`Physician Supply`),
+              sum(df23$`Lack of Equipment`),
+              sum(df23$`Lack of Payment`),
+              sum(df23$`Lack of Patient Education`),
+              sum(df23$`Language Barriers`),
+              sum(df23$`Transportation Barriers`),
+              sum(df23$`Infrastructure`))) %>%
+  mutate(
+    "Unselected" = nrow(df23) - Votes,
+    "Percent" = percent((Votes / nrow(df23)), accuracy = .1)
+  )
+# creates a barplot of each of the perceived barriers to Global Health
+# and includes percent selected
+ggplot(df23g, aes(reorder(Barriers, -Votes), Votes)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Barriers to healthcare in low-resource settings",
+       x = "", y = "") +
+  geom_text(aes(label = Percent), nudge_y = 5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  theme(axis.text.x = element_text(size = 7.3)) +
+  scale_y_continuous(limits = c(0,120))
+```
+
+\newpage
+
+B. Barriers to Providing Healthcare by Global Health Career Interest
+
+```{r}
+#| fig.height: 3.5
+# converts the list into several columns
+df23Int <- df23 %>% filter(Q14 == "Yes")
+df23NotInt <- df23 %>% filter(Q14 == "No")
+
+df23gInt <- tibble(
+  "Barriers" = c("Physician Supply", "Physician Supply",
+                 "Lack of Equipment", "Lack of Equipment",
+                 "Lack of Payment", "Lack of Payment",
+                 "Lack of Patient Education", "Lack of Patient Education",
+                 "Language Barriers", "Language Barriers",
+                 "Transportation Barriers", "Transportation Barriers",
+                 "Infrastructure", "Infrastructure"),
+  "Int_GH" = c("Yes", "No",
+               "Yes", "No",
+               "Yes", "No",
+               "Yes", "No",
+               "Yes", "No",
+               "Yes", "No",
+               "Yes", "No"),
+  "Votes" = c(sum(df23Int$`Physician Supply`),
+            sum(df23NotInt$`Physician Supply`),
+            sum(df23Int$`Lack of Equipment`),
+            sum(df23NotInt$`Lack of Equipment`),
+            sum(df23Int$`Lack of Payment`),
+            sum(df23NotInt$`Lack of Payment`),
+            sum(df23Int$`Lack of Patient Education`),
+            sum(df23NotInt$`Lack of Patient Education`),
+            sum(df23Int$`Language Barriers`),
+            sum(df23NotInt$`Language Barriers`),
+            sum(df23Int$`Transportation Barriers`),
+            sum(df23NotInt$`Transportation Barriers`),
+            sum(df23Int$`Infrastructure`),
+            sum(df23NotInt$`Infrastructure`))) %>%
+  mutate(
+    Decimal = as.double(if_else(Int_GH == "Yes",
+                                Votes/nrow(df23Int),
+                                Votes/nrow(df23NotInt))),
+    Percent = percent(Decimal,accuracy = .1))
+
+# barriers to healthcare in low resources by interest in Global Health
+ggplot(df23gInt, aes(reorder(Barriers, -Votes), Votes, fill = Int_GH)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings", x = "",
+       fill = "Interested in Global Health?", y = "") +
+  geom_text(aes(label = Votes), vjust = -.2, position = position_dodge(width = .9)) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limits = c(0,60)) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+```{r}
+#| fig.height: 3.5
+ggplot(df23gInt, aes(reorder(Barriers, -Decimal), Decimal, fill = Int_GH)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings",
+       x = "", fill = "Interested in Global Health?", y = "") +
+  geom_text(aes(label = Percent), vjust = -.3,
+            position = position_dodge(width = .9), size = 2.3) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  ) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+\newpage
+
+Below is a Chi Squared Test. This tests to see if the two distributions of perceived barriers to low-resource healthcare are distinct from one another. The test cannot confirm that there is a distinction. In other words, the overall difference in perceived barriers to healthcare in low resource settings of those who are interested in a Global Health Career and those who are uninterested is not significant.
+
+```{r}
+#| warning: false
+df23gIntChi <- df23gInt %>% select(Barriers, Int_GH, Percent) %>% 
+  pivot_wider(names_from = Int_GH, values_from = Percent)
+chisq.test(df23gIntChi$Yes, df23gIntChi$No)
+```
+
+\newpage
+
+C. Barriers to Providing Healthcare by Born Abroad
+
+```{r}
+#| fig.height: 3.5
+# converts the list into several columns
+df23Born <- df23 %>% filter(Q10 == "Yes")
+df23NotBorn <- df23 %>% filter(Q10 == "No")
+
+df23gBorn <- tibble(
+  "Barriers" = c("Physician Supply", "Physician Supply",
+                 "Lack of Equipment", "Lack of Equipment",
+                 "Lack of Payment", "Lack of Payment",
+                 "Lack of Patient Education", "Lack of Patient Education",
+                 "Language Barriers", "Language Barriers",
+                 "Transportation Barriers", "Transportation Barriers",
+                 "Infrastructure", "Infrastructure"),
+  "Born_Abroad" = c("Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No"),
+  "Votes" = c(sum(df23Born$`Physician Supply`),
+            sum(df23NotBorn$`Physician Supply`),
+            sum(df23Born$`Lack of Equipment`),
+            sum(df23NotBorn$`Lack of Equipment`),
+            sum(df23Born$`Lack of Payment`),
+            sum(df23NotBorn$`Lack of Payment`),
+            sum(df23Born$`Lack of Patient Education`),
+            sum(df23NotBorn$`Lack of Patient Education`),
+            sum(df23Born$`Language Barriers`),
+            sum(df23NotBorn$`Language Barriers`),
+            sum(df23Born$`Transportation Barriers`),
+            sum(df23NotBorn$`Transportation Barriers`),
+            sum(df23Born$`Infrastructure`),
+            sum(df23NotBorn$`Infrastructure`))) %>%
+  mutate(
+    Decimal = as.double(if_else(Born_Abroad == "Yes",
+                                Votes/nrow(df23Born),
+                                Votes/nrow(df23NotBorn))),
+    Percent = percent(Decimal,accuracy = .1))
+
+# barriers to healthcare in low resources by Born Abroad
+ggplot(df23gBorn, aes(reorder(Barriers, -Votes), Votes, fill = Born_Abroad)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings", x = "",
+       fill = "Born Abroad?", y = "") +
+  geom_text(aes(label = Votes), vjust = -.2, position = position_dodge(width = .9)) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limits = c(0,100)) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+```{r}
+#| fig.height: 3.5
+ggplot(df23gBorn, aes(reorder(Barriers, -Decimal), Decimal, fill = Born_Abroad)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings",
+       x = "", fill = "Born Abroad?", y = "") +
+  geom_text(aes(label = Percent), vjust = -.3,
+            position = position_dodge(width = .9), size = 2.3) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  ) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+\newpage
+
+Below is a Chi Squared Test. This tests to see if the two distributions of perceived barriers to low-resource healthcare are distinct from one another. The test cannot confirm that there is a distinction. In other words, the overall difference in perceived barriers to healthcare in low resource settings of those who are interested in a Global Health Career and those who are uninterested is not significant.
+
+```{r}
+#| warning: false
+df23gBornChi <- df23gBorn %>% select(Barriers, Born_Abroad, Percent) %>% 
+  pivot_wider(names_from = Born_Abroad, values_from = Percent)
+chisq.test(df23gBornChi$Yes, df23gBornChi$No)
+```
+
+\newpage
+
+D. Barriers to Providing Healthcare by Lived Abroad
+
+```{r}
+#| fig.height: 3.5
+# converts the list into several columns
+df23Lived <- df23 %>% filter(Q12 == "Yes")
+df23NotLived <- df23 %>% filter(Q12 == "No")
+
+df23gLived <- tibble(
+  "Barriers" = c("Physician Supply", "Physician Supply",
+                 "Lack of Equipment", "Lack of Equipment",
+                 "Lack of Payment", "Lack of Payment",
+                 "Lack of Patient Education", "Lack of Patient Education",
+                 "Language Barriers", "Language Barriers",
+                 "Transportation Barriers", "Transportation Barriers",
+                 "Infrastructure", "Infrastructure"),
+  "Lived_Abroad" = c("Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No",
+                    "Yes", "No"),
+  "Votes" = c(sum(df23Lived$`Physician Supply`),
+            sum(df23NotLived$`Physician Supply`),
+            sum(df23Lived$`Lack of Equipment`),
+            sum(df23NotLived$`Lack of Equipment`),
+            sum(df23Lived$`Lack of Payment`),
+            sum(df23NotLived$`Lack of Payment`),
+            sum(df23Lived$`Lack of Patient Education`),
+            sum(df23NotLived$`Lack of Patient Education`),
+            sum(df23Lived$`Language Barriers`),
+            sum(df23NotLived$`Language Barriers`),
+            sum(df23Lived$`Transportation Barriers`),
+            sum(df23NotLived$`Transportation Barriers`),
+            sum(df23Lived$`Infrastructure`),
+            sum(df23NotLived$`Infrastructure`))) %>%
+  mutate(
+    Decimal = as.double(if_else(Lived_Abroad == "Yes",
+                                Votes/nrow(df23Lived),
+                                Votes/nrow(df23NotLived))),
+    Percent = percent(Decimal,accuracy = .1))
+
+# barriers to healthcare in low resources by Lived Abroad
+ggplot(df23gLived, aes(reorder(Barriers, -Votes), Votes, fill = Lived_Abroad)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings", x = "",
+       fill = "Lived Abroad?", y = "") +
+  geom_text(aes(label = Votes), vjust = -.2, position = position_dodge(width = .9)) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limits = c(0,100)) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+```{r}
+#| fig.height: 3.5
+ggplot(df23gLived, aes(reorder(Barriers, -Decimal), Decimal, fill = Lived_Abroad)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Barriers to Healthcare in low-resource settings",
+       x = "", fill = "Lived Abroad?", y = "") +
+  geom_text(aes(label = Percent), vjust = -.3,
+            position = position_dodge(width = .9), size = 2.3) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .10),
+    labels = label_percent(accuracy = 1)
+  ) +
+  theme(axis.text.x = element_text(size = 7.3),
+        legend.position = "bottom")
+```
+
+\newpage
+
+Below is a Chi Squared Test. This tests to see if the two distributions of perceived barriers to low-resource healthcare are distinct from one another. The test cannot confirm that there is a distinction. In other words, the overall difference in perceived barriers to healthcare in low resource settings of those who are interested in a Global Health Career and those who are uninterested is not significant.
+
+```{r}
+#| warning: false
+df23gLivedChi <- df23gLived %>% select(Barriers, Lived_Abroad, Percent) %>% 
+  pivot_wider(names_from = Lived_Abroad, values_from = Percent) %>% view()
+chisq.test(df23gLivedChi$Yes, df23gLivedChi$No)
+```
+
+\newpage
+
+## 12. Rank the following in order of the medical field that you believe has historically had the GREATEST impact on the global health field to the medical field you believe has historically had the LEAST impact on the global health field.
+
+```{r}
+# creating the column names vector
+df24c <- df0 %>%
+  filter((Q24_1 != "")) %>%
+  select(starts_with("Q24_")) %>%
+  slice(1) %>% t() %>% as.data.frame()
+FieldsL <- str_replace(df24c$V1, "Rank the following in order of the medical field that you believe has historically had the GREATEST impact on the global health field to the medical field you believe has historically had the LEAST impact on the global health field. - ", "") %>%
+  recode("OB/GYN (including maternal fetal medicine)" = "OB/GYN",
+         "Surgical care (elective, urgent & obstetric)" = "Surgical care")
+
+FieldsL <- unlist(FieldsL)
+
+# tidying up the data
+df24 <- df0 %>%
+  filter((Q24_1 != "")) %>%
+  select(starts_with("Q24_")) %>%
+  slice(3:n())
+
+# renaming the columns
+colnames(df24) <- FieldsL
+
+df24 <- df24 %>% mutate_all(
+    function(x) as.numeric(as.character(x))
+    ) %>%
+      pivot_longer(c(`Emergency medicine`:`Orthopedics`),
+                   names_to = "Fields", values_to = "Rank")
+
+# creating summary
+df24s <- df24 %>%
+  group_by(Fields) %>%
+  summarize(
+    Minimum = min(Rank),
+    "Q-1" = quantile(Rank, .25),
+    Mean = mean(Rank),
+    "Q-3" = quantile(Rank, .75),
+    Maximum = max(Rank)
+  ) %>%
+  arrange(Mean) %>% print()
+
+# order
+Fields24Order <- df24s %>% select(Fields)
+```
+
+\newpage
+
+```{r}
+#| fig.height: 8.5
+#| fig.width: 7
+ggplot(df24) +
+  geom_histogram(aes(Rank, fill = Fields), binwidth = 1) +
+  facet_wrap(~Fields, scales = 'free_x') +
+  theme(legend.position = "none") +
+  labs(title = "Medical Field Historical Impact Rankings", y = "", x = "") +
+  scale_x_continuous(breaks = seq(1, 11, by = 2))
+```
+
+\newpage
+
+## 13. Rank the following in order of the medical field that you believe will have the GREATEST impact on the global health field in the future to the medical field you believe will have the LEAST impact on the global health field in the future.
+
+```{r}
+# creating the column names vector
+df25c <- df0 %>%
+  filter((Q25_1 != "")) %>%
+  select(starts_with("Q25_")) %>%
+  slice(1) %>% t() %>% as.data.frame()
+FieldsL <- str_replace(df25c$V1, "Rank the following in order of the medical field that you believe will have the GREATEST impact on the global health field in the future to the medical field you believe will have the LEAST impact on the global health field in the future. - ", "") %>%
+  recode("OB/GYN (including maternal fetal medicine)" = "OB/GYN",
+         "Surgical care (elective, urgent & obstetric)" = "Surgical care")
+
+FieldsL <- unlist(FieldsL)
+
+# tidying up the data
+df25 <- df0 %>%
+  filter((Q25_1 != "")) %>%
+  select(starts_with("Q25_")) %>%
+  slice(3:n())
+
+# renaming the columns
+colnames(df25) <- FieldsL
+
+df25 <- df25 %>% mutate_all(
+    function(x) as.numeric(as.character(x))
+    ) %>%
+      pivot_longer(c(`Emergency medicine`:`Orthopedics`),
+                   names_to = "Fields", values_to = "Rank")
+
+# creating summary
+df25s <- df25 %>%
+  group_by(Fields) %>%
+  summarize(
+    Minimum = min(Rank),
+    "Q-1" = quantile(Rank, .25),
+    Mean = mean(Rank),
+    "Q-3" = quantile(Rank, .75),
+    Maximum = max(Rank)
+  ) %>%
+  arrange(Mean) %>% print()
+```
+
+\newpage
+
+```{r}
+#| fig.height: 8.5
+#| fig.width: 7
+ggplot(df25) +
+  geom_histogram(aes(Rank, fill = Fields), binwidth = 1) +
+  facet_wrap(~Fields, scales = 'free_x') +
+  theme(legend.position = "none") +
+  labs(title = "Medical Field Impact Rankings", y = "", x = "") +
+  scale_x_continuous(breaks = seq(1, 11, by = 2))
+```
+
+
+
+\newpage
+
+## 14. In your opinion, which THREE of the following medical fields contribute MOST to strengthening the delivery of all other types of care?
+
+A. Overall Results for Contribution of Various Medical Fields to other types
+
+```{r}
+df27 <- df %>%
+  filter(Q27 != "") %>%
+  mutate(
+    "Emergency Medicine" = str_count(Q27, "Emergency medicine"),
+    "Family Medicine" = str_count(Q27, "Family medicine"),
+    "Infectious Diseases" = str_count(Q27, "Infectious Diseases"),
+    "Neurology" = str_count(Q27, "Neurology"),
+    "OB/GYN" = str_count(Q27, "OB/GYN"),
+    "Oncology" = str_count(Q27, "Oncology"),
+    "Pediatrics" = str_count(Q27, "Pediatrics"),
+    "Psychiatry" = str_count(Q27, "Psychiatry"),
+    "Surgical Care" = str_count(Q27, "Surgical care"),
+    "Ophthalmology" = str_count(Q27, "Ophthalmology"),
+    "Orthopedics" = str_count(Q27, "Orthopedics"),
+    "Number of Fields Selected" = str_count(Q23, ",") + 1
+  )
+
+# creates a tibble of the totals
+df27g <- tibble(
+  "Fields" = c("Emergency Medicine", "Family Medicine",
+               "Infectious Diseases", "Neurology",
+               "OB/GYN", "Oncology",
+               "Pediatrics", "Psychiatry",
+               "Surgical Care", "Ophthalmology",
+               "Orthopedics"),
+  "Votes" = c(sum(df27$`Emergency Medicine`),
+              sum(df27$`Family Medicine`),
+              sum(df27$`Infectious Diseases`),
+              sum(df27$`Neurology`),
+              sum(df27$`OB/GYN`),
+              sum(df27$`Oncology`),
+              sum(df27$`Pediatrics`),
+              sum(df27$`Psychiatry`),
+              sum(df27$`Surgical Care`),
+              sum(df27$`Ophthalmology`),
+              sum(df27$`Orthopedics`))) %>%
+  mutate(
+    "Unselected" = nrow(df23) - Votes,
+    "Percent" = percent((Votes / nrow(df23)), accuracy = .1)
+  )
+# creates a barplot of each of the perceived barriers to Global Health
+# and includes percent selected
+ggplot(df27g, aes(reorder(Fields, -Votes), Votes)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Medical Fields that strengthen other types of care",
+       x = "", y = "") +
+  geom_text(aes(label = Percent), nudge_y = 5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  theme(axis.text.x = element_text(size = 5.6)) +
+  scale_y_continuous(limits = c(0,95))
+```
+
+
+\newpage
+
+## 15. Increasing access to surgical care should be a priority for countries increasing access to healthcare.
+
+A. Overall Results
+
+```{r}
+Response_levels <- c("Strongly Agree", "Agree", "Undecided", "Disagree", "Strongly Disagree")
+df28 <- df %>% filter(Q28 != "") %>%
+  mutate(
+    factor(Q28, levels = Response_levels)
+  )
+# Bar Graph
+df28 %>%
+  group_by(Q28) %>%
+  summarise(
+    Count = n()
+  ) %>% add_row(
+    Q28 = "Strongly Disagree", Count = 0
+  ) %>%
+  ggplot(aes(fct_relevel(Q28, Response_levels), Count)) +
+  geom_bar(stat = "identity", fill = "cornsilk3") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3) +
+  labs(title = "Prioritize Increasing Access to Surgical Care",
+       x = "", y = "") +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+```
+
+
+

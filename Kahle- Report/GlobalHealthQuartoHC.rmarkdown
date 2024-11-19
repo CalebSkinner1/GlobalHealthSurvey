@@ -1,0 +1,846 @@
+---
+format: 
+  pdf:
+    keep-tex: true
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "#", fig.height = 3, 
+  cache = FALSE,  collapse = TRUE,
+  error = TRUE, echo = FALSE,
+  message = FALSE
+)
+```
+
+
+<!-- put your name below instead of mine -->
+
+Caleb Skinner
+
+Global Health Survey Honors Contract
+
+December 8, 2022
+
+<!-- Setting up tidyverse. Reading in the csv and all that bonkers stuff -->
+
+```{r}
+#| include: false
+library("here")
+library("tidyverse"); theme_set(theme_minimal())
+library(rjags)
+library(rstanarm)
+library(scales)
+library(ggpubr)
+library(broom)
+library(AICcmodavg)
+library(waffle)
+library(gtsummary)
+
+# loading df- helpful for viewing the questions
+file_name <- here("Global_Health_data.csv")
+df0 <- read_csv(file_name) %>%
+  select(20,22:24,26,28,30,36,38:45,47:50) %>% view()
+
+# removing excess rows and fixing bad responses
+df <- df0[-c(1:2),] %>% 
+  mutate(Q17 = recode(Q17,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+          Q22 = recode(Q22,
+                      'Strongly Agree ' = 'Strongly Agree',
+                      'Undecided ' = 'Undecided',
+                      'Strongly Disagree ' = 'Strongly Disagree'),
+          Q14 = recode(Q14,
+                      'No ' = 'No'),
+          Q13 = recode(Q13,
+                      '15+ years ' = '15+ years',
+                      '5 - 10 years ' = '5 - 10 years',
+                      '10 - 15 years ' = '10 - 15 years',
+                      '1 - 5 years ' = '1 - 5 years',
+                      'Less than one year ' = 'Less than one year'
+                      ),
+          Q6 = recode(Q6,
+                      'Pre-professional track - only choose this option if you do not have another major that fits into one of the above categories' = 'Pre-Professional Track'),
+         Q18 = recode(Q18,
+                      'I don’t know' = "I don't know")
+         )
+```
+
+
+## Introduction:
+
+This report analyzes a Global Health Survey created and sent by a team of Baylor undergraduates. There is very little information on the perception and awareness of Global Health in the undergraduate community. This survey seeks to determine more about the interest in a Global Health Career among undergraduates, as well as their opinions on how upper-level education can or is supporting that potential career. It mimics a similar survey that was released to medical school students, and the hope is to compare these results with other surveys. 
+
+The survey creators are fairly uncertain about the scope and content of this project's conclusions, so this survey will serve as a probe into the unknown world of undergraduate's opinions on Global Health.
+
+Below is a list of important questions asked by the survey that will be covered in this report:
+
+
+```{r}
+library(janitor)
+Questions <- df0 %>%
+  row_to_names(row_number = 1) %>%
+  select(11:17) %>%
+  ls()
+cat(str_wrap(Questions, width = 45, indent = 2), "\n")
+```
+
+
+\newpage
+
+## Data:
+
+From what I have heard, the data collection method was not statistically viable. The survey was sent out randomly (I think) to schools across the nation, but after a few months, the survey had only 70 or 80 responses. Eventually, the survey creators opened up the survey to undergraduates from Baylor University. That is where the rest of the 245 responses came.
+
+
+```{r}
+library(glue)
+glue("The dataset had {df %>% nrow()} responses. But not all of the respondents filled out \n the survey completely.")
+
+glue("For example, the survey had only {df0 %>% filter(!is.na(Q23)) %>% nrow()} responses to the final question.")
+```
+
+
+Below is some background information on the respondents.
+
+Most respondents are in their sophomore or junior years in college.
+
+```{r}
+df %>% filter(Q2 != "") %>%
+  group_by(Q2) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(Q2, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Year in Undergraduate Program", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3)
+```
+
+
+\newpage
+
+As expected, most respondents are between 18-20 years old.
+
+
+```{r}
+df %>% filter(Q3 != "") %>%
+  group_by(Q3) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(Q3, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Age", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 6)
+```
+
+
+Most of the Respondents are White.
+
+
+```{r}
+df %>% filter(Q29 != "") %>%
+  group_by(Q29) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(reorder(Q29, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Ethnicity", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+```
+
+
+\newpage
+
+A vast majority of the respondents are Women.
+
+
+```{r}
+df %>% filter(Q9 != "") %>%
+  group_by(Q9) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(reorder(Q9, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Gender Identity", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 6) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 13))
+```
+
+
+As aforementioned, about half of the respondents attend Baylor University.
+
+
+```{r}
+abc <- df %>% filter(Q4 != "") %>%
+  group_by(Q4) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  mutate(
+    Small = if_else(Count < 2, 1, if_else(Q4 == "Other", 8, 0))
+  )
+abc %>%
+  add_row(
+    Q4 = "Other", Count = sum(abc$Small), Small = 0
+  ) %>%
+  filter(Small == 0) %>% 
+  ggplot(aes(reorder(Q4, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Undergraduate University", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 10)) +
+  theme(axis.text.x = element_text(size = 5.8))
+```
+
+
+\newpage
+
+Most of the respondents are pursuing the bachelor of science degree.
+
+
+```{r}
+df %>% filter(Q5 != "") %>%
+  group_by(Q5) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(reorder(Q5, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Degree Type", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12))
+```
+
+
+A majority of the respondents' have a natural and physical sciences major or a public health, health sciences, and nursing major. This is fitting for a health survey.
+
+
+```{r}
+df %>% filter(Q6 != "") %>%
+  group_by(Q6) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(reorder(Q6, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Respondents' Major", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 4) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 11)) +
+  theme(axis.text.x = element_text(size = 8))
+```
+
+
+\newpage
+
+The following questions about asking the respondents if they were born or have lived abroad will be essential for further analysis about Global Health.
+
+
+```{r}
+library(patchwork)
+a <- df %>% filter(Q10 != "") %>%
+  group_by(Q10) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(Q10, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Born Abroad?", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 6)
+b <- df %>% filter(Q12 != "") %>%
+  group_by(Q12) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(Q12, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Lived Abroad?", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 6)
+a + b
+```
+
+
+The amount of time that those who did live abroad varies quite a bit.  9 lived abroad for over 15 years, but 9 also lived abroad for 1-5 years.
+
+
+```{r}
+df %>% filter(Q13 != "") %>%
+  group_by(Q13) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(x = factor(Q13, level = c('Less than one year',
+                                             '1 - 5 years',
+                                             '5 - 10 years',
+                                             '10 - 15 years',
+                                             '15+ years')), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Lived Abroad Length", x = "Responses") +
+  geom_text(aes(label = signif(Count)), nudge_y = .5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 10)) +
+  scale_y_continuous(breaks = c(2,4,6,8))
+```
+
+
+\newpage
+
+## Results:
+
+In this section, I will address four of the survey questions that were most interesting. I will respond to the questions with visualizations and a few statistical tests to help demonstrate the statistical significance of the perceived conclusions.
+
+1. How do pre-medical students perceive a career in global health?
+
+Below is a bar graph that demonstrates the overall results to the question. Most students are interested or uncertain of their interest in Global Health.
+
+
+```{r}
+df14 <- df %>% 
+  filter(Q14 != "") # %>% view()
+# set yes = 1, unsure = .5, and no = 0 for t tests
+df14ttest <- df14 %>%
+  mutate(Q14 = case_when(
+    Q14 == "Unsure" ~ .5,
+    Q14 == "Yes" ~ 1,
+    Q14 == "No" ~ 0)
+  ) # %>% view()
+
+# Bar Graph
+df14 %>%
+  group_by(Q14) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(Q14, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Interested in a Global Health Career?", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3)
+```
+
+
+\newpage
+
+1A. Pursuing a career in Global Health grouped by those who have lived abroad.
+
+Of those who have lived abroad, there seems to be a higher percentage that want to pursue a career in Global Health. A large portion who have not lived abroad are uncertain about the idea.
+
+
+```{r}
+df14 %>%
+  filter(Q12 != "") %>% 
+  group_by(Q12, Q14) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(Q12, Count, fill = Q14)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Global Health Career Interest by Lived Abroad",
+       x = "Lived Abroad?",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0,70))
+```
+
+
+\newpage
+
+The following is a t-test measuring the difference in interest in a Global Health Career in those who have lived outside the US and those who have not. For this t-test I counted "unsure" responses as 1/2 a "yes" and 1/2 a "no".
+
+
+
+```{r}
+t.test(df14ttest %>% filter(Q12 == "No") %>% select(Q14),
+       df14ttest %>% filter(Q12 == "Yes") %>% select(Q14))
+```
+
+
+The results are significant. Those who have lived outside the US demonstrate a higher interest in a Global Health Career than those who have not lived outside the US.
+
+The following is a second t-test measuring the difference in interest in a Global Health Career in those who have lived outside the US and those who have not. For this t-test I removed "unsure" responses from the data.
+
+
+```{r}
+t.test(df14ttest %>% filter(Q12 == "No", Q14 != .5) %>% select(Q14),
+       df14ttest %>% filter(Q12 == "Yes", Q14 != .5) %>% select(Q14))
+```
+
+
+Once again, the results are significant. Those who have lived outside the US demonstrate a higher interest in a Global Health Career than those who have not lived outside the US.
+
+\newpage
+
+There does not seem to be an obvious change in responses depending on the length of time spent abroad.
+
+
+```{r}
+df14 %>%
+  filter(Q13 != "") %>% 
+  group_by(Q13, Q14) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(Q13, Count, fill = Q14)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Global Health Career Interest by length of time abroad",
+       x = "Time Abroad",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0,6.5))
+```
+
+
+\newpage
+
+1B. Pursuing a career in Global Health grouped by those who were born abroad.
+
+Again, of those who were born abroad, there seems to be a higher percentage that want to pursue a career in Global Health. A large portion who were not born abroad are uncertain about the idea, but a good about of them are still interested.
+
+
+```{r}
+df14 %>%
+  filter(Q10 != "") %>% 
+  group_by(Q10, Q14) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(Q10, Count, fill = Q14)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Global Health Career Interest by Born outside US",
+       x = "Born outside US?",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0,70))
+```
+
+
+\newpage
+
+The following is a t-test measuring the difference in interest in a Global Health Career in those who were born outside the US and those who were not. For this t-test I counted "unsure" responses as 1/2 a "yes" and 1/2 a "no".
+
+
+
+```{r}
+t.test(df14ttest %>% filter(Q10 == "No") %>% select(Q14),
+       df14ttest %>% filter(Q10 == "Yes") %>% select(Q14))
+```
+
+
+The results are significant. Those who were born outside the US demonstrate a higher interest in a Global Health Career than those who were not born outside the US.
+
+The following is a t-test measuring the difference in interest in a Global Health Career in those who were born outside the US and those who were not. For this t-test I removed "unsure" responses.
+
+
+
+```{r}
+t.test(df14ttest %>% filter(Q10 == "No", Q14 != .5) %>% select(Q14),
+       df14ttest %>% filter(Q10 == "Yes", Q14 != .5) %>% select(Q14))
+```
+
+
+The results are significant. Those who were born outside the US demonstrate a higher interest in a Global Health Career than those who were not born outside the US.
+
+\newpage
+
+1C. Pursuing a career in Global Health grouped by major.
+
+
+```{r}
+df14 %>%
+  filter(Q6 != "") %>% 
+  group_by(Q6, Q14) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ggplot(aes(Q6, Count, fill = Q14)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Global Health Career Interest by Major",
+       x = "",
+       fill = "Global Health Interest:") +
+  theme(legend.position = "bottom", axis.text.x = element_text(size = 6.5)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9)) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 11)) +
+  scale_y_continuous(limits = c(0,40))
+```
+
+
+\newpage
+
+2. Should all pre-medical students take at least one global health-focused class before entering medical school?
+
+Below is a bar graph that demonstrates the overall results. Most respondents either strongly agreed or agreed that Global Health is a required course.
+
+
+```{r}
+Response_levels <- c("Strongly Agree", "Agree", "Undecided", "Disagree", "Strongly Disagree")
+
+df17 <- df %>% 
+  filter(Q17 != "") %>%
+  mutate(
+    factor(Q17, levels = Response_levels)
+    ) #%>% view()
+
+# Bar Graph
+df17 %>%
+  group_by(Q17) %>%
+  summarise(
+    Count = n()
+  ) %>% 
+  ggplot(aes(fct_relevel(Q17, Response_levels), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Require a Global Health Course?", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3)
+```
+
+
+\newpage
+
+2A. Global Health Class Requirement by Global Health Career Interest
+
+It appears that a higher percentage of those interested in Global Health selected 'Strongly Agree' and 'Agree' than those who are unsure of their interest or uninterested.
+
+
+```{r}
+df17gInt <- df17 %>%
+  filter(Q14 != "") %>% 
+  group_by(Q14, Q17) %>%
+  summarise(
+    Count = n()
+  )
+ggplot(df17gInt, aes(Q14, Count, fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Required Global Health Course by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Require Course:") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0, 45))
+```
+
+
+The aforementioned perceptions are made even more clear when the selections are calculated as percentages. Each Global Health Career Interest Category totals up to 100%. This helps to bridge the possible difference in sample size of the three groups.
+
+
+```{r}
+df17gInt %>% group_by(Q14) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(Q14, Decimal, fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Required Global Health Course by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Require Course:", y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9), size = 2.5) +
+  scale_y_continuous(
+      breaks = seq(0, 1, by = .10),
+      labels = label_percent(accuracy = 1)
+    )
+```
+
+
+\newpage
+
+2B. Global Health Class Requirement by Living Abroad
+
+At first glance, there is not much distinction between those who have lived abroad and those who have not lived abroad. Both sections are dominated by those who agree and strongly agree to the Global Health Class Requirement.
+
+
+```{r}
+df17gAbroad <- df17 %>%
+  filter(Q12 != "") %>% 
+  group_by(Q12, Q17) %>%
+  summarise(
+    Count = n()
+  )
+ggplot(df17gAbroad, aes(Q12, Count, fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Required Global Health Course by Lived Abroad",
+       x = "Lived Abroad",
+       fill = "Require Course:") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limits = c(0, 65))
+```
+
+
+Upon converting the columns into percentages, the similarities are confirmed. It appears that there is not much difference in those who lived abroad and those who did not live abroad.
+
+
+```{r}
+df17gAbroad %>% group_by(Q12) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+  ggplot(aes(Q12, Decimal, fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Required Global Health Course by Lived Abroad",
+       x = "Lived Abroad",
+       fill = "Require Course:",
+       y = "") +
+  theme(legend.position = "bottom", legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9),
+            size = 3) +
+  scale_y_continuous(
+      breaks = seq(0, 1, by = .10),
+      labels = label_percent(accuracy = 1),
+      limits = c(0,.5)
+    )
+```
+
+
+\newpage
+
+2C. Global Health Class Requirement by Major
+
+The below graph differentiates the Global Health Class Requirement by Major. It is difficult to perceive distinctions because there are so many natural and physical science, and public health majors.
+
+
+```{r}
+df17gMajor <- df17 %>%
+  filter(Q6 != "") %>% 
+  group_by(Q6, Q17) %>%
+  summarise(
+    Count = n()
+  )
+ggplot(df17gMajor, aes(reorder(Q6, -Count), Count,
+                       fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Required Global Health Course by Major", x = "Major",
+       fill = "Require Course:", y = "") +
+  theme(legend.position = "bottom", axis.text.x = element_text(size = 6.5), legend.title = element_text(size = 7), legend.text = element_text(size = 7)) +
+  geom_text(aes(label = signif(Count)), vjust = -.1, position = position_dodge(width = .9), size = 2.8) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limits = c(0,35))
+```
+
+
+After converting the counts to percentages, it appears that most of the majors have similar opinions on the Required Global Health Class. It should be noted, however, that many of these majors have very few respondents. Realistically, conclusions can only be drawn from the top two majors: Natural and physical sciences and public health, health sciences, and nursing.
+
+
+```{r}
+df17gMajor %>% group_by(Q6) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+ggplot(aes(reorder(Q6, -Count), Decimal,
+           fill = fct_relevel(Q17, Response_levels))) +
+  geom_bar(stat = "identity", position = position_stack()) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 11)) +
+  labs(x = "Major", title = "Required Global Health by Major",
+       fill = "Require Course:", y = "") +
+  theme(axis.text.x = element_text(size = 5.5),
+        legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7)) +
+  scale_y_continuous(
+      breaks = seq(0, 1, by = .10),
+      labels = label_percent(accuracy = 1),
+    )
+```
+
+
+3. In your opinion, are there enough global health opportunities available to US pre-medical students?
+
+Below is a bar graph that demonstrates the overall results. Most respondents selected "I don't know" or "No". Very few chose "yes".
+
+
+```{r}
+YNResponses <- c("Yes", "I don't know", "No")
+df18 <- df %>% 
+  filter(Q18 != "") %>% mutate(
+    factor(Q18, YNResponses)
+  )
+df18ttest <- df18 %>%
+  mutate(Q18 = case_when(
+    Q18 == "I don't know" ~ .5,
+    Q18 == "Yes" ~ 1,
+    Q18 == "No" ~ 0)
+  )
+df18 %>%
+  group_by(Q18) %>%
+  summarise(
+    Count = n()
+  ) %>% ggplot(aes(fct_relevel(Q18, YNResponses), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Are there enough global health opportunities?",
+       x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 3)
+```
+
+
+\newpage
+
+3A. Global Health Opportunities by Global Health Career Interest
+
+It appears that those that are interested in a career in Global Health are much more likely to answer that there are not sufficient Global Health Opportunities. Most of those that are uninterested or unsure of their interest in Global Health are unsure of the extent of Global Health opportunities.
+
+
+```{r}
+#| fig.height: 2.9
+df18Interest <- df18 %>%
+  filter(Q14 != "") %>% 
+  group_by(Q14, Q18) %>%
+  summarise(
+    Count = n()
+  )
+ggplot(df18Interest, aes(Q14, Count, fill = fct_relevel(Q18, YNResponses))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Opportunities in Global Health by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Enough Global Health Opportunities:") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = signif(Count)), vjust = -.1,
+            position = position_dodge(width = .9)) +
+  scale_y_continuous(limit = c(0, 43))
+```
+
+
+After converting the counts into percentages, it is evident that a large portion of those uninterested and uncertan of their interest in Global Health are unsure if there are enough Global Health Opportunities. Almost double the proportion of those who are interested in a Global Health career think there are not enough Global Health Opportunities.
+
+
+```{r}
+#| fig.height: 2.9
+df18Interest %>% group_by(Q14) %>%
+  mutate(
+    Decimal = Count / sum(Count),
+    Percent = percent(Decimal, accuracy = .1)
+  ) %>%
+ggplot(aes(reorder(Q14, Count), Decimal,
+           fill = fct_relevel(Q18, YNResponses))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 11)) +
+  labs(title = "Opportunities in Global Health by Global Health Interest",
+       x = "Global Health Career Interest",
+       fill = "Enough Global Health Opportunities:",
+       y = "") +
+  theme(legend.position = "bottom") +
+  geom_text(aes(label = Percent), vjust = -.1,
+            position = position_dodge(width = .9),
+            size = 3) +
+  scale_y_continuous(
+      breaks = seq(0, 1, by = .10),
+      labels = label_percent(accuracy = 1),
+      limits = c(0,.65)
+    )
+```
+
+
+\newpage
+
+The following is a t-test measuring the difference in belief that there are sufficient Global Health opportunities for pre-med students in those who have expressed interest in a Global Health Career and those who have not. For this t-test, I counted "I don't know" responses to the sufficient Global Health Opportunities Question as 1/2 a "yes" and 1/2 a "no".
+
+
+
+```{r}
+t.test(df18ttest %>% filter(Q14 == "No") %>% select(Q18),
+       df18ttest %>% filter(Q14 == "Yes") %>% select(Q18))
+```
+
+
+The results are significant. Those who have express an interest in a Global Health Career indicate that there are not sufficient Global Health Opportunities at a higher rate than those who have not expressed an interest in a Global Health Career.
+
+The following is a second t-test measuring the difference in belief that there are sufficient Global Health opportunities for pre-med students in those who have expressed interest in a Global Health Career and those who have not. For this t-test, I removed all "I don't know" responses.
+
+
+
+```{r}
+t.test(df18ttest %>% filter(Q14 == "No", Q18 != .5) %>% select(Q18),
+       df18ttest %>% filter(Q14 == "Yes", Q18 != .5) %>% select(Q18))
+```
+
+
+The results are not significant. This is likely because a large amount of respondents selected "I don't know." This drops the sample size to only 80.
+
+\newpage
+
+4. Which, if any, of the following do you perceive as reasons it is difficult for undergraduate pre-medical students to learn more about global health and gain experience in the field prior to medical school?
+
+Below shows the immediate results to the question. It seems Busyness and Finances are the two largest hindrances to Global Health Awareness and Access. The plot includes the counts of each response as well as the percent of the respondents that selected each hindrance. A notable 83.4% of respondents indicated that busyness is a large hindrance to Global Health Awareness and Access.
+
+
+```{r}
+#| fig.height: 2.8
+df19 <- df %>% filter(Q19 != "") %>% mutate(
+  Faculty = str_count(Q19, "Lack of global health faculty"),
+  Extracurricular = str_count(Q19, "Lack of extracurricular opportunities"),
+  Busyness = str_count(Q19, "Time constraints"),
+  Financial = str_count(Q19, "Financial barriers"),
+  Research = str_count(Q19, "research opportunities"),
+  Ethical_Issues = str_count(Q19, "Ethical issues"),
+  Physician_Mentorship = str_count(Q19, "Lack of mentorship"),
+  Other = str_count(Q19, "Other"),
+  Total_Problems = rowSums(across(where(is.numeric)))
+)
+df19g <- df19 %>% summarise(
+  'Lacking Faculty Mentorship' = sum(Faculty),
+  'Lacking Extracurricular Opportunities' = sum(Extracurricular),
+  Busyness = sum(Busyness),
+  Financial = sum(Financial),
+  'Lacking Research Opportunities' = sum(Research),
+  'Ethical Issues' = sum(Ethical_Issues),
+  'Lacking Physician Mentorship' = sum(Physician_Mentorship),
+  Other = sum(Other)
+) %>%
+  t() %>% as.data.frame() %>% rownames_to_column(var = "rowname") # %>% view()
+colnames(df19g) <- c("Problems", "Count")
+df19g <- df19g %>% mutate(
+  Percent = percent(Count/nrow(df %>% filter(Q19 != "")), accuracy = .1)
+)
+# creates a barplot of each of the academic disciplines for education training
+# and includes percent selected
+ggplot(df19g, aes(reorder(Problems, -Count), Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Hindrances to Global Health Awareness and Experience", x = "") +
+  geom_text(aes(label = Percent), nudge_y = 5.5) +
+  scale_x_discrete(labels = function(x) str_wrap(x,width = 12)) +
+  scale_y_continuous(limit = c(0,140)) +
+  theme(axis.text.x = element_text(size = 6.8))
+```
+
+
+The question allowed the respondents to select multiple hindrances. This graph shows the total number of hindrances that each respondent selected. Most respondents chose between two and four.
+
+
+```{r}
+#| fig.height: 2.8
+df19 %>% group_by(Total_Problems) %>%
+  summarise(
+    Count = n()
+  ) %>% 
+  ggplot(aes(Total_Problems, Count)) +
+  geom_bar(stat = "identity", fill = 'cornsilk3') +
+  labs(title = "Total Hindrances to Global Health", x = "") +
+  geom_text(aes(label = signif(Count)), nudge_y = 2) +
+  scale_x_continuous(breaks = seq(1,9, by = 1))
+```
+
+
+\newpage
+
+## Conclusion:
+
+There are a few general conclusions that we can draw from the surveys. First, a sizable amount of undergraduate students are interested in a career in Global Health. There are also a large amount that are uncertain about their interest. Living and being born abroad have a significant correlation with this interest.
+
+A large amount of those interested in a career in Global Health are convinced that there are not enough opportunities to gain awareness or experience in Global Health.
+
+One possible response to this is requiring a Global Health Course to enter medical school. A sizable majority of students agreed that this was a good idea. As expected, this majority increased drastically if a student was already interested in Global Health.
+
+The respondents have identified a few different hindrances to a Global Health Career. The most commonly selected were busyness and finances. 
+
+Altogether, it is difficult to draw significant conclusions from a survey like this. The sampling is not perfect, and far from comprehensive of the entire United States. There are not enough respondents and some of the questions are broad and open ended. Still, it gives the readers a good idea of undergraduates' general perception of Global Health. Hopefully this will open up future, more comprehensive surveys to come.
+
+There are several more questions that I have analyzed that were not selected in this Honors Contract Report. These could provide further illumination on the subject.
+
+
