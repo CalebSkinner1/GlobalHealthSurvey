@@ -27,7 +27,6 @@ Global Health Survey Questions 6-10
 #| include: false
 library("here")
 library("tidyverse"); theme_set(theme_minimal())
-library(rjags)
 library(rstanarm)
 library(scales)
 library(ggpubr)
